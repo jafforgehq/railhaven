@@ -10,7 +10,7 @@ config_version=5
 
 [application]
 
-config/name="Railhaven: Scorched Line"
+config/name="Railhaven"
 config/use_custom_user_dir=true
 config/custom_user_dir_name="Railhaven"
 config/description="Idle colony management aboard a moving armored train."

@@ -4,3 +4,4 @@ export/
 *.aab
 *.ipa
 .DS_Store
+build/
