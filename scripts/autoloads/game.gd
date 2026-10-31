@@ -683,6 +683,23 @@ func goal_progress(g: Dictionary) -> Array:
 	return [0, 1]
 
 
+## Carriage the player should build next for the current goal ("" if none). Detours to a
+## Cooling Module when the train has no room, so out-of-order building never dead-ends.
+func goal_build_type() -> String:
+	var g := current_goal()
+	if g.is_empty():
+		return ""
+	var t := ""
+	match g["kind"]:
+		"build":
+			t = g["arg"] if count_type(g["arg"]) < g["n"] else ""
+		"assign", "level":
+			t = g["arg"] if count_type(g["arg"]) == 0 else ""
+	if t != "" and t != "cooling" and build_block_reason(t) == "Needs more cooling capacity":
+		return "cooling"
+	return t
+
+
 func _check_goals() -> void:
 	while goal_index < Data.GOALS.size():
 		var g: Dictionary = Data.GOALS[goal_index]

@@ -40,8 +40,7 @@ func build() -> void:
 		cards.add_child(card)
 		_cards[t] = [cost, why, btn]
 		main.register_target("build_" + t, btn)
-		var g := Game.current_goal()
-		if g.get("kind", "") == "build" and g.get("arg", "") == t:
+		if Game.goal_build_type() == t:
 			card.theme_type_variation = "CardTeal"
 			scroll.ensure_control_visible.call_deferred(card)
 

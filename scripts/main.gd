@@ -418,6 +418,32 @@ func _update_coach(delta: float) -> void:
 	var text := ""
 	var arrow := true
 	var on_train := tab == "train"
+	var to_build := Game.goal_build_type()
+	if to_build != "":
+		# Building flow (also covers goals whose carriage does not exist yet).
+		var name: String = Data.CARRIAGES[to_build]["name"]
+		var detour: bool = to_build != g.get("arg", "")
+		if not on_train:
+			pos = _target_pos("tab_train")
+			text = "Back to the train"
+		elif current is BuildPanel:
+			pos = _target_pos("build_" + to_build)
+			if detour:
+				text = "No room left on the train. Build a Cooling Module first"
+			elif Game.build_block_reason(to_build) == "":
+				text = "Build the %s" % name
+			else:
+				text = "%s: %s. Your drones and workshop are collecting more" % [name, Game.build_block_reason(to_build).to_lower()]
+		elif current is OverviewPanel:
+			pos = _target_pos("add_carriage")
+			text = "No room left. Add a Cooling Module first" if detour else "Add a %s to your train" % name
+		else:
+			pos = world.world_to_screen(world.carriage_center(-1))
+			text = "Tap the empty slot to add a carriage"
+		if pos.x < 0:
+			text = ""
+		coach.point(pos, text)
+		return
 	match g["kind"]:
 		"assign", "level", "survivors":
 			var type: String = g.get("arg", "quarters")

@@ -29,6 +29,8 @@ func _ready() -> void:
 		_gallery.call_deferred()
 	elif OS.get_cmdline_user_args().has("--chars"):
 		_chars.call_deferred()
+	elif OS.get_cmdline_user_args().has("--detour"):
+		_detour.call_deferred()
 	else:
 		_tour.call_deferred()
 
@@ -214,4 +216,27 @@ func _chars() -> void:
 		p.custom_minimum_size = Vector2(130, 130)
 		row.add_child(p)
 	await _shot("chars")
+	get_tree().quit()
+
+
+## Regression view: recycler built before the greenhouse goal; the coach must send the
+## player to build a Cooling Module instead of dead-ending.
+func _detour() -> void:
+	var main: Node = get_parent()
+	await get_tree().create_timer(0.3).timeout
+	while not main._modal_stack.is_empty():
+		main.close_modal()
+	Game.new_game()
+	Game.intro_seen = true
+	Game.res["scrap"] = 400.0
+	Game.res["parts"] = 120.0
+	Game.goal_index = 2
+	Game.build("recycler")
+	main.world.rebuild()
+	main._rebuild_plates()
+	main.show_train_overview()
+	await _shot("detour_overview")
+	main.open_build()
+	await get_tree().create_timer(0.8).timeout
+	await _shot("detour_build")
 	get_tree().quit()

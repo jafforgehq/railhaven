@@ -170,6 +170,8 @@ func refresh() -> void:
 		go_button.visible = false
 	else:
 		_goal_text.text = g["text"]
+		if Game.goal_build_type() == "cooling" and g.get("arg", "") != "cooling":
+			_goal_text.text += "\nNo room yet: build a Cooling Module first"
 		var p := Game.goal_progress(g)
 		_goal_prog.text = "%d / %d" % [mini(p[0], p[1]), p[1]]
 		_goal_bar.value = clampf(float(p[0]) / maxf(1.0, p[1]), 0.0, 1.0)

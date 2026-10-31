@@ -82,6 +82,17 @@ func _initialize() -> void:
 	check(g.build_block_reason("quarters").begins_with("Room reserved"), "free slots reserved for goal carriages")
 	check(g.build("greenhouse") > 0 and g.build("recycler") > 0, "reserved goal carriages can still be built")
 
+	# Building the recycler first must not dead-end the greenhouse goal: detour to cooling.
+	g.new_game()
+	g.res["scrap"] = 5000.0
+	g.res["parts"] = 5000.0
+	g.goal_index = 2 # "Build a Greenhouse"
+	g.build("recycler")
+	check(g.build_block_reason("greenhouse") == "Needs more cooling capacity", "greenhouse blocked after early recycler")
+	check(g.goal_build_type() == "cooling", "tutorial detours to a Cooling Module")
+	g.build("cooling")
+	check(g.goal_build_type() == "greenhouse" and g.build("greenhouse") > 0, "greenhouse buildable after cooling")
+
 	# Tower chapter.
 	g.distance = Data.TOWER_DISTANCE
 	g.res["scrap"] = 5000.0
