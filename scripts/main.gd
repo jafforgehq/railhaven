@@ -16,6 +16,10 @@ var _tab_buttons := {}
 var _plates := {}
 var _modal_stack: Array[Control] = []
 var _last_band_bottom := -1.0
+var coach: Coach
+var targets := {} # name -> Control the coach can point at
+var _go_boost := 0.0
+const TUTORIAL_GOALS := 8 # the pointer guides these goals without being asked
 
 
 func _ready() -> void:
@@ -35,6 +39,8 @@ func _ready() -> void:
 	toasts.offset_top = 300
 	toasts.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	add_child(toasts)
+	coach = Coach.new()
+	add_child(coach)
 	modal_layer = Control.new()
 	modal_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	modal_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -68,6 +74,8 @@ func _ready() -> void:
 	_layout.call_deferred()
 	if not Game.pending_report.is_empty():
 		_on_offline_report.call_deferred(Game.pending_report)
+	if not Game.intro_seen:
+		Popups.how_to_play.call_deferred(self)
 	if Game.chapter_done and not Game.chapter_seen:
 		_on_chapter_complete.call_deferred()
 
@@ -133,6 +141,7 @@ func _build_bottom() -> void:
 			set_tab(id))
 		nav.add_child(b)
 		_tab_buttons[id] = b
+		targets["tab_" + id] = b
 
 
 func _safe_bottom() -> int:
@@ -279,17 +288,22 @@ func _process(_delta: float) -> void:
 		var nm: Label = plate.get_meta("name")
 		var ex: Label = plate.get_meta("extra")
 		var d: Dictionary = Data.CARRIAGES[c["type"]]
-		nm.text = "%s  Lv.%d" % [d["name"].to_upper(), c["level"]]
+		nm.text = d["name"]
 		var slots := Data.slots(c["type"], c["level"])
 		if slots > 0:
 			var n := Game.workers_in(uid).size()
-			ex.text = "%d/%d" % [n, slots]
-			ex.add_theme_color_override("font_color", UIKit.RED if n == 0 and d.has("res") else UIKit.MUTED)
+			if n == 0 and d.has("res") and c["type"] != "dronebay":
+				ex.text = "needs workers"
+				ex.add_theme_color_override("font_color", UIKit.RED)
+			else:
+				ex.text = "●".repeat(n) + "○".repeat(slots - n)
+				ex.add_theme_color_override("font_color", UIKit.TEAL)
 		else:
 			ex.text = ""
 		plate.size = plate.get_combined_minimum_size()
 		plate.position = (sp - Vector2(plate.size.x * 0.5, 0)).round()
 		plate.visible = sp.x > -plate.size.x and sp.x < w + plate.size.x and sp.y > hud.band_top() - 40
+	_update_coach(_delta)
 
 
 func _float_text(world_pos: Vector2, text: String, color: Color) -> void:
@@ -374,8 +388,96 @@ func close_modal_of(content: Control) -> void:
 			return
 
 
+func register_target(name: String, control: Control) -> void:
+	targets[name] = control
+
+
+func _target_pos(name: String) -> Vector2:
+	var c: Control = targets.get(name)
+	if c == null or not is_instance_valid(c) or not c.is_visible_in_tree():
+		return Vector2(-1, -1)
+	var r := c.get_global_rect()
+	if r.end.y < 0 or r.position.y > get_viewport_rect().size.y:
+		return Vector2(-1, -1)
+	return Vector2(r.get_center().x, r.position.y)
+
+
+func _carriage_pos(uid: int) -> Vector2:
+	var c := world.carriage_center(uid)
+	return world.world_to_screen(Vector2(c.x, -60.0))
+
+
+## Works out what the player should tap next for the current goal.
+func _update_coach(delta: float) -> void:
+	_go_boost = maxf(0.0, _go_boost - delta)
+	var g := Game.current_goal()
+	if g.is_empty() or not _modal_stack.is_empty() or (Game.goal_index >= TUTORIAL_GOALS and _go_boost <= 0.0):
+		coach.point(Vector2.ZERO, "")
+		return
+	var pos := Vector2(-1, -1)
+	var text := ""
+	var arrow := true
+	var on_train := tab == "train"
+	match g["kind"]:
+		"assign", "level", "survivors":
+			var type: String = g.get("arg", "quarters")
+			var c := Game.first_of(type)
+			var name: String = Data.CARRIAGES[type]["name"]
+			if c.is_empty():
+				pos = _target_pos("add_carriage")
+				text = "Build a %s first" % name
+			elif on_train and current is CarriagePanel and current.uid == c["uid"]:
+				if g["kind"] == "assign":
+					pos = _target_pos("assign_slot")
+					text = "Tap + to put a survivor to work here"
+				else:
+					pos = _target_pos("upgrade")
+					text = "Tap UPGRADE" if Game.upgrade_block_reason(c["uid"]) == "" else "Upgrade needs more resources. Your drones and workshop are collecting them"
+			elif not on_train:
+				pos = _target_pos("tab_train")
+				text = "Back to the train"
+			else:
+				pos = _carriage_pos(c["uid"])
+				text = "Tap the %s" % name
+		"build":
+			var type: String = g["arg"]
+			var name: String = Data.CARRIAGES[type]["name"]
+			if not on_train:
+				pos = _target_pos("tab_train")
+				text = "Back to the train"
+			elif current is BuildPanel:
+				pos = _target_pos("build_" + type)
+				text = "Build the %s" % name if Game.build_block_reason(type) == "" else "%s: %s" % [name, Game.build_block_reason(type).to_lower()]
+			elif current is OverviewPanel:
+				pos = _target_pos("add_carriage")
+				text = "Add a %s to your train" % name
+			else:
+				pos = world.world_to_screen(world.carriage_center(-1))
+				text = "Tap the empty slot to add a carriage"
+		"salvaged":
+			var bay := Game.first_of("dronebay")
+			pos = _carriage_pos(bay["uid"])
+			text = "Drones collect scrap by themselves. Just watch them work"
+		"distance":
+			pos = Vector2(get_viewport_rect().size.x * 0.5, hud.band_top() + 10)
+			text = "The train is driving to the Climate Tower. Keep building meanwhile"
+			arrow = false
+		"tower":
+			if tab != "journey":
+				pos = _target_pos("tab_journey")
+				text = "Open Journey to restore the tower"
+			else:
+				pos = _target_pos("launch")
+				text = "Send the drones to the tower"
+	if pos.x < 0:
+		coach.point(Vector2.ZERO, "")
+	else:
+		coach.point(pos, text, arrow)
+
+
 ## Takes the player to the place where the current goal is solved.
 func goto_goal() -> void:
+	_go_boost = 10.0
 	var g := Game.current_goal()
 	if g.is_empty():
 		set_tab("journey")

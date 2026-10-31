@@ -108,6 +108,7 @@ func _build_stages() -> void:
 				col.add_child(UIKit.hbox(10, [UIKit.label("Drones en route", "Accent"), _exp_bar, _exp_time]))
 			else:
 				_launch = UIKit.button("LAUNCH EXPEDITION", "TealButton", "drone", 58)
+				main.register_target("launch", _launch)
 				_launch.pressed.connect(func():
 					if not Game.start_expedition():
 						Audio.play("error"))

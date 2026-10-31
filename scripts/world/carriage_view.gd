@@ -24,7 +24,7 @@ var _sparks: Array = [] # [pos, vel, life]
 
 func _ready() -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	for n in ["wheel", "wheel_big", "rod", "fan", "drone", "drone_crate"]:
+	for n in ["wheel", "bogie2", "truck3", "fan", "drone", "drone_crate"]:
 		art(n)
 
 
@@ -307,11 +307,13 @@ func _fx_dronebay() -> void:
 	draw_circle(rc + Vector2(4, -3), 0.8, Color("ffb050"))
 
 
+## Wheels turn behind the bogie side frames, so every wheel reads as mounted.
 func _draw_wheels() -> void:
-	var spin := -t * 9.0
-	for bx in [30.0, W - 30.0]:
-		for wx in [bx - 13, bx + 13]:
-			part("wheel", Vector2(wx, -7), Vector2(17, 17), spin)
+	var spin := -t * 7.0
+	for bx in [32.0, W - 32.0]:
+		for wx in [bx - 14, bx + 14]:
+			part("wheel", Vector2(wx, -9), Vector2(21, 21), spin)
+		draw_texture_rect(art("bogie2"), Rect2(bx - 28, -24, 56, 24), false)
 
 
 ## Drone sprite for the flying salvage layer (s = 1 is full size).

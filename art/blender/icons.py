@@ -183,7 +183,18 @@ def icon_warning():
     box("dot", -0.06, -0.33, 0.06, -0.2, -0.1, -0.08, M("2a1a08"), outline=False)
 
 
-ICONS = {
+def icon_arrow():
+    prism("arrow", [(-0.22, 0.62), (0.22, 0.62), (0.22, 0.05), (0.5, 0.05), (0.0, -0.6), (-0.5, 0.05), (-0.22, 0.05)], -0.12, 0.12, M("f0b84a", light=1.3))
+
+
+def icon_bulb():
+    sphere("glass", 0.36, M("ffe08a", glow=1.2), (0, 0, 0.12), outline=True)
+    cylinder("base", 0.17, 0.3, M("8a8f96"), (0, 0, -0.36))
+    for z in (-0.28, -0.38):
+        cylinder("thread", 0.19, 0.04, M("5a5f66"), (0, 0, z), outline=False)
+
+
+ICONS = {"arrow": icon_arrow, "bulb": icon_bulb, 
     "scrap": icon_scrap, "parts": icon_parts, "food": icon_food, "water": icon_water, "crew": icon_crew,
     "home": icon_home, "cooling": icon_cooling, "drone": icon_drone, "train": icon_train, "tower": icon_tower,
     "wrench": icon_wrench, "hammer": icon_hammer, "bed": icon_bed, "shield": icon_shield, "sun": icon_sun,

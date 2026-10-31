@@ -36,10 +36,9 @@ if __name__ == "__main__":
     S.plane("ground", -200, -60, 400, 0, 20, S.gradient([(0.0, "5a2512"), (1.0, "a9532a")], -60, 0))
     C.box("rail", -200, -1, 400, 1.6, -30, -28, C.toon("e2e5ea", ao=0.0), outline=False)
     K.locomotive()
-    placed(lambda: K.wheel(7.0, False), 30, 7)
-    for wx in (60.0, 90.0, 120.0):
-        placed(lambda: K.wheel(13.0, True), wx, 13)
-    placed(lambda: K.wheel(8.0, False), 176, 8)
-    placed(K.rod, 60, 13)
-    C.render_region(sc, cam, -34, 214, -14, 234, 1024 / 248.0, OUT)
+    for tx in (40.0, 160.0):
+        for k in (-17.0, 0.0, 17.0):
+            placed(lambda: K.wheel(8.0, False), tx + k, 8)
+        placed(lambda: K.bogie(3, 17, 8.0), tx, 0)
+    C.render_region(sc, cam, -40, 212, -16, 236, 1024 / 252.0, OUT)
     print("DONE", OUT)

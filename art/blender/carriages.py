@@ -84,15 +84,13 @@ def shell(kind, level):
     # Underframe, skirt, equipment boxes and bogie frames.
     box("frame", 0, 20, W, 26, -5, BACK + 3, M(HULL_DARK))
     box("frame_trim", 0, 25.2, W, 26, -5.4, BACK + 3, M(TRIM), outline=False)
-    box("skirt", 0, 15, W, 20, -3, BACK, M("121417"), outline=False)
+    box("skirt", 0, 17, W, 20, -3, BACK, M("121417"), outline=False)
     for bx in (72.0, 126.0):
         box("equip", bx, 10.5, bx + 34, 19.5, -3, 10, M("2a2e34"))
         for k in range(4):
             box("hazard", bx + 3 + k * 8, 12, bx + 7 + k * 8, 14.5, -3.4, -2.9, M("d9a33a", ao=0.0), outline=False)
-    for bx in (30.0, W - 30.0):
-        box("bogie", bx - 25, 12, bx + 25, 17.5, -4, BACK, M("2b2e34"))
-        for k in (-4, 0, 4):
-            zcyl("spring", 1.0, 17.5, 21, bx + k, -4, M("8a8f96"))
+    for bx in (32.0, W - 32.0):  # bolster pads the bogies (rendered separately) bolt onto
+        box("bolster", bx - 10, 16, bx + 10, 20, -4, BACK, M("2b2e34"))
     # Level pips on the roof.
     for i in range(level):
         ycyl("pip", 1.6, 1.0, M("f0b84a", glow=1.2), W - 14 - i * 6, TOP + 11.5, -6.8)
@@ -322,69 +320,92 @@ BUILDERS = {"quarters": quarters, "greenhouse": greenhouse, "recycler": recycler
 # ---------------------------------------------------------------- locomotive and parts
 
 def locomotive():
-    hull = M(HULL)
+    """Modern armored diesel-electric: streamlined nose cab, side grilles, roof radiators.
+    Trucks and wheels are separate sprites so they can turn; the cab window is a cutaway."""
+    body = M("2a2f36")
     dark = M(HULL_DARK)
-    trim = M(TRIM)
-    # Frame, running board, handrail.
-    box("lframe", 16, 36, 196, 42, -2, 30, dark)
-    box("lframe_trim", 16, 41.2, 196, 42, -2.4, 30, trim, outline=False)
-    box("lskirt", 18, 20, 196, 28, -1, 28, dark)
-    for x in range(26, 130, 14):
-        zcyl("rail_post", 0.4, 42, 50, x, -2.6, M("8a8f96"), outline=False)
-    xcyl("handrail", 0.45, 22, 130, 50, -2.6, M("b0b5bc"), outline=False)
-    # Boiler cylinder with bands.
-    xcyl("boiler", 32, 18, 136, 74, 13, hull, seg=40)
-    for bx in (42.0, 70.0, 98.0, 126.0):
-        xcyl("band", 32.6, bx, bx + 3.2, 74, 13, trim, outline=False, seg=40)
-    # Armor plate with rivets and nameplate.
-    box("armor", 50, 60, 112, 88, -20, -18.5, M("1f2328"))
-    for x in range(54, 110, 7):
-        for z in (85, 63):
-            sphere("rivet", 0.7, M("737985", ao=0.0), (x, -20.7, z), outline=False, seg=8)
-    box("nameplate", 64, 69, 98, 79, -21.4, -20, M("c09a50"))
-    text("RH-01", "RH-01", 8.5, M("3a2810", ao=0.0), (81, -21.6, 71))
-    # Smokebox face.
-    ycyl("smokebox", 22, 3, M("1c1f24"), 14, 74, -18)
-    torus("smoke_ring", 19.5, 1.2, trim, (14, -19.6, 74), rot=(math.pi / 2, 0, 0))
-    ycyl("smoke_handle", 2.4, 2, M("6a6f78"), 6, 74, -20)
-    # Headlight.
-    box("lamp_box", 4, 100, 17, 112, -10, 2, M("2c3036"))
-    ycyl("lamp_lens", 3.4, 1.0, M("fff4d0", glow=1.8), 5, 106, -10.6, outline=False)
-    # Chimney and domes.
-    cylinder("chimney", 7, 22, M("1c1f24"), (47, 13, 117), r2=9)
-    cylinder("chimney_cap", 13, 6, M("2c3036"), (47, 13, 131))
-    cylinder("soot", 9.5, 1, M("0d0e10", ao=0.0), (47, 13, 134.2), outline=False)
-    sphere("dome", 10, trim, (92, 13, 106), scale=(1, 1, 0.9))
-    sphere("sand", 6, M("3a3f45"), (116, 13, 106), scale=(1, 1, 0.9))
-    zcyl("whistle", 1.0, 112, 122, 102, 13, M("c0c6cc"))
-    # Cab with a window into the warm interior.
-    box("cab_back", 134, 24, 198, 134, 22, 32, hull)
-    box("cab_l", 134, 24, 142, 134, -6, 32, hull)
-    box("cab_r", 190, 24, 198, 134, -6, 32, hull)
-    box("cab_low", 142, 24, 190, 66, -6, 32, hull)
-    box("cab_top", 142, 120, 190, 134, -6, 32, hull)
-    box("cab_inside", 142, 66, 190, 120, 20, 22, M("2f4440", ao=0.0), outline=False)
-    box("firebox", 146, 66, 168, 84, 18, 20, M("ff7a2a", glow=1.8), outline=False)
-    box("gauge_box", 172, 102, 186, 112, 18, 20, M("101820"))
-    box("gauge_screen", 174, 104, 184, 110, 17.6, 18, M("3fd8c2", glow=0.9), outline=False)
-    box("cab_floor", 142, 62, 190, 66, -6, 22, M("43362b"))
-    box("cab_roof", 128, 133, 202, 142, -8, 34, M(HULL_DARK), bevel=3.5)
-    box("cab_trim", 130, 132.5, 200, 133.7, -8.4, 34, trim, outline=False)
-    for z in range(30, 130, 10):
-        sphere("rivet", 0.65, M("737985", ao=0.0), (137.5, -6.6, z), outline=False, seg=8)
-        sphere("rivet", 0.65, M("737985", ao=0.0), (194.5, -6.6, z), outline=False, seg=8)
-    # Cowcatcher, buffer beam, cylinder block.
-    prism("cowcatcher", [(20, 28), (20, 3), (-4, 3)], -10, 26, M("2c2f34"))
-    for k in range(5):
-        box("slat", -1 + k * 4.6, 4, 0.2 + k * 4.6, 26 - k * 4.4, -10.6, -10, M("6a6f78"), outline=False)
-    box("buffer", 12, 24, 22, 34, -11, 28, M("8a2a20"))
-    for k in range(2):
-        box("buffer_stripe", 13 + k * 4.5, 25, 15.2 + k * 4.5, 33, -11.4, -11, M("e9b04a", ao=0.0), outline=False)
-    box("cylinder_block", 24, 12, 50, 26, -8, 4, M("2c3036"))
-    ycyl("cyl_cap", 3.0, 1.5, M("3a3f45"), 24, 19, -8.6)
+    plate = M("343a42")
+    orange = M("e0782e", light=1.2)
+    glass = M("3fa8b8", light=1.3, ao=0.0)
+    # Interior seen through the cab window.
+    box("cab_inside", 24, 80, 68, 128, 22, 24, M("23403e", ao=0.0), outline=False)
+    box("console", 26, 80, 46, 92, 16, 22, M("1a2228"))
+    box("console_screen", 28, 88, 44, 91.6, 15.6, 16, M("3fd8c2", glow=1.0), outline=False)
+    box("cab_floor", 24, 76, 68, 80, -4, 24, M("43362b"))
+    # Streamlined nose (front of the cab), shell around the window, long hood behind.
+    nose = [(-24, 26), (-26, 46), (-18, 72), (2, 100), (18, 128), (30, 136), (24, 136), (24, 26)]
+    prism("nose", nose, -6, 30, body)
+    box("cab_low", 24, 26, 68, 80, -6, 30, body)
+    box("cab_top", 22, 128, 70, 136, -6, 30, body)
+    box("cab_rear", 66, 26, 74, 136, -6, 30, body)
+    box("hood", 72, 26, 202, 128, -6, 30, body, bevel=4)
+    box("roof", 20, 128, 204, 137, -7, 31, plate, bevel=4)
+    # Windshield along the slope plus the cutaway frame.
+    prism("windshield", [(2, 100), (18, 128), (24, 128), (24, 100)], -6.6, -6.0, glass, outline=False)
+    prism("windshield_glint", [(9, 104), (19, 124), (21, 124), (11, 104)], -6.9, -6.6, M("ffffff", glow=0.45), outline=False)
+    box("nose_panel", -24, 30, 22, 44, -6.6, -6.0, M("23282e"), outline=False)
+    for x0, z0, x1, z1 in ((24, 126, 70, 128), (24, 78, 70, 80), (22, 78, 24, 128), (68, 78, 70, 128)):
+        box("window_frame", x0, z0, x1, z1, -6.8, -5.6, M("b08a45"), outline=False)
+    # Brand stripe, number, armour plates with rivets.
+    box("stripe", -16, 60, 202, 66, -6.8, -6.0, orange, outline=False)
+    box("stripe_thin", -10, 54, 202, 55.5, -6.8, -6.0, M("f0b84a", ao=0.0), outline=False)
+    text("RH-01", "RH-01", 9, M("e9e4d8", ao=0.0), (114, -6.9, 88))
+    for x0 in (76, 128):
+        box("armor", x0, 30, x0 + 48, 52, -7.2, -6.2, plate)
+        for x in range(x0 + 4, x0 + 46, 7):
+            for z in (33, 49):
+                sphere("rivet", 0.6, M("737985", ao=0.0), (x, -7.4, z), outline=False, seg=8)
+    # Side grilles.
+    for x0 in (138, 168):
+        box("grille", x0, 74, x0 + 26, 112, -6.6, -6.0, M("1c2026"))
+        for k in range(9):
+            box("louver", x0 + 1.5, 76 + k * 4, x0 + 24.5, 77.4 + k * 4, -7.0, -6.6, M("4a515a", ao=0.0), outline=False)
+    box("door", 78, 70, 90, 118, -6.6, -6.0, M("23282e"))
+    box("door_handle", 87, 92, 88.4, 98, -7.0, -6.6, M("c9ccd2"), outline=False)
+    # Lights: LED headlight cluster, marker lights, roof light bar.
+    box("headlight_housing", -24, 50, -16, 58, -7, 4, M("1c1f24"))
+    ycyl("headlight", 2.8, 1.0, M("fff4d0", glow=2.0), -20, 54, -7.6, outline=False)
+    ycyl("marker", 1.4, 1.0, M("ff4a30", glow=1.6), -21, 40, -6.8, outline=False)
+    box("lightbar", 20, 137, 50, 140, 2, 24, M("1c1f24"))
+    box("lightbar_glow", 22, 137.5, 48, 139.4, 1.6, 2, M("ffd890", glow=1.4), outline=False)
+    # Roof equipment: exhaust stack, radiator fans, AC unit, antenna.
+    box("exhaust", 96, 137, 106, 146, 6, 18, M("1c1f24"))
+    box("exhaust_cap", 94, 146, 108, 148, 5, 19, M("3a3f45"))
+    for cx in (140.0, 170.0):
+        C.cylinder("radiator", 11, 4, M("30353d"), (cx, 12, 139))
+        C.cylinder("radiator_fan", 9, 1, M("15181c", ao=0.0), (cx, 12, 141.2), outline=False)
+    box("ac_unit", 110, 137, 128, 143, 4, 22, M("3a3f45"))
+    C.zcyl("antenna", 0.5, 137, 156, 60, 10, M("8a8f96"), outline=False)
+    # Frame, fuel tank, plow.
+    box("frame", -14, 22, 202, 28, -6, 30, dark)
+    box("frame_trim", -14, 27.2, 202, 28, -6.4, 30, M(TRIM), outline=False)
+    box("fuel_tank", 70, 8, 126, 22, -2, 26, M("30353d"), bevel=4)
+    for k in range(6):
+        box("tank_hazard", 74 + k * 8.5, 13, 78 + k * 8.5, 17, -2.6, -2.0, M("d9a33a", ao=0.0), outline=False)
+    prism("plow", [(-34, 26), (-6, 26), (-6, 2), (-22, 2)], -8, 28, M("2c2f34"))
+    for k in range(4):
+        prism("plow_stripe", [(-31 + k * 6, 25), (-27 + k * 6, 25), (-17 + k * 6, 3), (-21 + k * 6, 3)], -8.6, -8.0, M("e9b04a", ao=0.0), outline=False)
+    for bx in (40.0, 160.0):
+        box("bolster", bx - 12, 18, bx + 12, 22, -4, 26, M("2b2e34"))
+
+
+def bogie(axles, spacing, r):
+    """Slim side frame at hub height with axle boxes, links up to a bolster beam.
+    Drawn in front of the turning wheels so each wheel is visibly mounted."""
+    half = spacing * (axles - 1) / 2 + 3
+    frame = M("2b2e34")
+    box("sideframe", -half, r - 1.2, half, r + 1.6, -10, -7, frame, bevel=0.8)
+    box("bolster_beam", -half + 4, r + 7, half - 4, r + 11, -10, -7, frame, bevel=1.0)
+    for k in range(axles):
+        x = -spacing * (axles - 1) / 2 + k * spacing
+        box("axlebox", x - 2.6, r - 2.6, x + 2.6, r + 2.6, -11, -7, M("3a3f45"), bevel=0.8)
+        C.ycyl("axle_cap", 1.4, 1.0, M("b08a45"), x, r, -11.4)
+        box("link", x - 0.9, r + 1.6, x + 0.9, r + 7, -10, -7.6, M("4a4f56"), outline=False)
+        C.zcyl("spring", 1.3, r + 2.6, r + 7, x + 3.6, -9, M("8a8f96"))
 
 
 def wheel(r, big):
+    ycyl("flange", r + 0.6, 1.2, M("1c1e22"), 0, 0, 1.6, seg=40)
     ycyl("tyre", r, 4, M("2a2c31"), 0, 0, 0, seg=40)
     torus("rim", r - 1.0, 0.7, M("b08a45" if big else "4a4d55"), (0, -2.2, 0), rot=(math.pi / 2, 0, 0), seg_u=40)
     spokes = 8 if big else 6
@@ -396,12 +417,6 @@ def wheel(r, big):
                    -2.8, -2.2, M("3a3d44"), outline=False)
     ycyl("hub", 2.6 if big else 2.0, 5, M("b08a45"), 0, 0, -0.5)
     ycyl("axle", 0.9, 5.6, M("3a2a18"), 0, 0, -0.8, outline=False)
-
-
-def rod():
-    xcyl("rod", 1.1, 0, 60, 0, 0, M("b8bec6"))
-    for x in (0.0, 30.0, 60.0):
-        ycyl("pin", 1.6, 3, M("e9b04a"), x, 0, -0.5)
 
 
 def fan_rotor():
@@ -450,10 +465,10 @@ if __name__ == "__main__":
             C.render_region(sc, cam, -4, 236, 0, 164, PX, os.path.join(OUT, name + ".png"))
             print("RENDERED", name)
     parts = {
-        "locomotive": (locomotive, (-26, 206, 0, 164), PX),
-        "wheel": (lambda: wheel(7.0, False), (-8.5, 8.5, -8.5, 8.5), 8.0),
-        "wheel_big": (lambda: wheel(13.0, True), (-14.5, 14.5, -14.5, 14.5), 8.0),
-        "rod": (rod, (-3, 63, -3, 3), 8.0),
+        "locomotive": (locomotive, (-36, 210, 0, 164), PX),
+        "wheel": (lambda: wheel(9.0, False), (-10.5, 10.5, -10.5, 10.5), 8.0),
+        "bogie2": (lambda: bogie(2, 28, 9.0), (-28, 28, 0, 24), 8.0),
+        "truck3": (lambda: bogie(3, 17, 8.0), (-30, 30, 0, 24), 8.0),
         "fan": (fan_rotor, (-19, 19, -19, 19), 8.0),
         "drone": (lambda: drone(False), (-19, 19, -14, 14), 8.0),
         "drone_crate": (lambda: drone(True), (-19, 19, -14, 14), 8.0),

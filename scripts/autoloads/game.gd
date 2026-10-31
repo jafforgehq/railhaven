@@ -34,6 +34,7 @@ var stats := {"salvaged": 0.0}
 var rationing := false
 var chapter_done := false
 var chapter_seen := false
+var intro_seen := false
 var event: Dictionary = {} # {id, choice, time_left, decide_left}
 var event_timer := 150.0
 var pending_report: Dictionary = {}
@@ -97,6 +98,7 @@ func new_game() -> void:
 	rationing = false
 	chapter_done = false
 	chapter_seen = false
+	intro_seen = false
 	event = {}
 	event_timer = 150.0
 	for t in ["locomotive", "quarters", "workshop", "dronebay"]:
@@ -704,7 +706,7 @@ func to_dict() -> Dictionary:
 		"growth_timer": growth_timer, "distance": distance,
 		"goal_index": goal_index, "tower_stage": tower_stage, "expedition": expedition,
 		"stats": stats, "rationing": rationing,
-		"chapter_done": chapter_done, "chapter_seen": chapter_seen,
+		"chapter_done": chapter_done, "chapter_seen": chapter_seen, "intro_seen": intro_seen,
 		"event_timer": event_timer,
 	}
 
@@ -773,6 +775,7 @@ func from_dict(d: Dictionary) -> void:
 	rationing = bool(d.get("rationing", false))
 	chapter_done = bool(d.get("chapter_done", false))
 	chapter_seen = bool(d.get("chapter_seen", false))
+	intro_seen = bool(d.get("intro_seen", true)) # older saves already know the game
 	event = {}
 	event_timer = float(d.get("event_timer", 150.0))
 	# Drop jobs that point at missing carriages.

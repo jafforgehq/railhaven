@@ -1,63 +1,79 @@
 class_name OverviewPanel
 extends BasePanel
-## Default Train screen sheet: production overview, storage bars, capacity summary.
+## Default Train sheet: one plain-language status line telling the player what matters
+## right now, compact resource rows, and the add-carriage button.
 
 const COLORS := {"scrap": Color("c9d1da"), "parts": Color("e9b04a"), "food": Color("8be06a"), "water": Color("5bb8ff")}
-var _cells := {}
+var _rows := {}
 var _status: Label
 var _status_icon: Icon
-var _summary: Label
+var _beds: Label
+var _slots: Label
 
 
 func build() -> void:
-	var title := UIKit.label("PRODUCTION OVERVIEW", "Header")
-	title.add_theme_font_size_override("font_size", 26)
-	_status_icon = Icon.make("check", 22, UIKit.GREEN)
-	_status = UIKit.label("", "Small")
-	add_child(UIKit.hbox(8, [Icon.make("train", 26, UIKit.GOLD), title, UIKit.spacer(), _status_icon, _status]))
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 10)
-	grid.add_theme_constant_override("v_separation", 10)
-	add_child(grid)
+	var title := UIKit.label("YOUR TRAIN", "Header")
+	add_child(UIKit.hbox(10, [Icon.make("train", 34), title, UIKit.spacer(), UIKit.label("Tap a carriage to manage it", "Small")]))
+	_status_icon = Icon.make("star", 30)
+	_status = UIKit.wrap_label("", "")
+	_status.add_theme_font_size_override("font_size", 23)
+	add_child(UIKit.panel("Card", UIKit.hbox(10, [_status_icon, _status])))
 	for k in Data.RES:
-		var rate := UIKit.label("", "Value")
-		var amount := UIKit.label("", "Small")
-		var b := UIKit.bar(0.0, COLORS[k], 8)
 		var nm := UIKit.label(Data.RES_NAMES[k], "")
-		nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var card := UIKit.panel("Card", UIKit.vbox(4, [UIKit.hbox(8, [Icon.make(k, 28), nm, rate]), b, amount]))
-		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		grid.add_child(card)
-		_cells[k] = [rate, amount, b]
-	_summary = UIKit.label("", "Small")
-	_summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	add_child(_summary)
-	var build_btn := UIKit.button("ADD A CARRIAGE", "TealButton", "plus", 58)
+		nm.custom_minimum_size.x = 76
+		var b := UIKit.bar(0.0, COLORS[k], 10)
+		var amount := UIKit.label("", "Value")
+		amount.custom_minimum_size.x = 104
+		amount.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		var rate := UIKit.label("", "Small")
+		rate.custom_minimum_size.x = 76
+		rate.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		add_child(UIKit.hbox(10, [Icon.make(k, 30), nm, b, amount, rate]))
+		_rows[k] = [b, amount, rate]
+	_beds = UIKit.label("", "Small")
+	_slots = UIKit.label("", "Small")
+	add_child(UIKit.hbox(18, [UIKit.hbox(6, [Icon.make("bed", 24), _beds]), UIKit.hbox(6, [Icon.make("cooling", 24), _slots])]))
+	var build_btn := UIKit.button("ADD A CARRIAGE", "TealButton", "hammer", 62)
 	build_btn.pressed.connect(func(): main.open_build())
 	add_child(build_btn)
+	main.register_target("add_carriage", build_btn)
 
 
 func refresh() -> void:
 	var r := Game.rates()
 	for k in Data.RES:
-		var cell: Array = _cells[k]
-		cell[0].text = UIKit.fmt_rate(r[k])
-		cell[0].add_theme_color_override("font_color", UIKit.GREEN if r[k] > 0.05 else (UIKit.RED if r[k] < -0.05 else UIKit.MUTED))
+		var row: Array = _rows[k]
 		var cap := Game.storage(k)
-		cell[1].text = "%s / %s stored" % [UIKit.fmt(Game.res[k]), UIKit.fmt(cap)]
-		cell[2].value = clampf(Game.res[k] / cap, 0.0, 1.0)
+		row[0].value = clampf(Game.res[k] / cap, 0.0, 1.0)
+		row[1].text = "%s/%s" % [UIKit.fmt(Game.res[k]), UIKit.fmt(cap)]
+		row[2].text = UIKit.fmt_rate(r[k])
+		row[2].add_theme_color_override("font_color", UIKit.GREEN if r[k] > 0.05 else (UIKit.RED if r[k] < -0.05 else UIKit.MUTED))
+	_beds.text = "Beds %d/%d" % [Game.survivors.size(), Game.capacity()]
+	_slots.text = "Train has room for %d more carriage%s" % [maxi(0, Game.cooling_capacity() - Game.cooling_used()), "" if Game.cooling_capacity() - Game.cooling_used() == 1 else "s"]
+	var s := status_line()
+	_status.text = s[1]
+	_status_icon.kind = s[0]
+	_status.add_theme_color_override("font_color", s[2])
+
+
+## The single most important thing for the player right now: [icon, text, colour].
+static func status_line() -> Array:
+	var r := Game.rates()
 	if Game.rationing:
-		_status.text = "Safe mode: rationing"
-		_status_icon.kind = "shield"
-		_status_icon.color = UIKit.ORANGE
-	elif Game.event.get("choice", "") == "b" and Game.event.get("id", "") == "heatwave":
-		_status.text = "Heatwave safe mode"
-		_status_icon.kind = "shield"
-		_status_icon.color = UIKit.ORANGE
-	else:
-		_status.text = "Stable production"
-		_status_icon.kind = "check"
-		_status_icon.color = UIKit.GREEN
-	_summary.text = "Cooling %d/%d carriages  ·  Beds %d/%d  ·  Tap a carriage to manage · drag to pan" % [
-		Game.cooling_used(), Game.cooling_capacity(), Game.survivors.size(), Game.capacity()]
+		return ["warning", "Out of food or water! The crew is rationing. Put workers in the Greenhouse or Water Recycler.", UIKit.RED]
+	for k in ["food", "water"]:
+		if r[k] < -0.05:
+			var minutes: float = Game.res[k] / -r[k]
+			if minutes < 20.0:
+				var where := "Greenhouse" if k == "food" else "Water Recycler"
+				var fix := "Put workers in the %s" % where if Game.count_type("greenhouse" if k == "food" else "recycler") > 0 else "Build a %s" % where
+				return ["warning", "%s runs out in about %d min. %s." % [Data.RES_NAMES[k], int(minutes), fix], UIKit.ORANGE]
+	var idle := Game.idle_survivors().size()
+	var open := 0
+	for c in Game.carriages:
+		open += maxi(0, Game.free_slots(c["uid"]))
+	if idle > 0 and open > 0:
+		return ["crew", "%d survivor%s resting. Open a carriage and tap + to give them work." % [idle, "" if idle == 1 else "s"], UIKit.GOLD]
+	if Game.res["scrap"] >= Game.storage("scrap") - 0.5:
+		return ["scrap", "Scrap storage is full. Spend it on building, or upgrade the Drone Bay.", UIKit.GOLD]
+	return ["check", "Everything is running. Your crew keeps working even when the game is closed.", UIKit.GREEN]

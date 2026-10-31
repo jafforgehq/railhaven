@@ -3,15 +3,17 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://638omhph2x8p"
-path="res://.godot/imported/carriage_quarters_4.png-3bf5f87a74fea269e34ad348a7349b9b.ctex"
+path.bptc="res://.godot/imported/carriage_quarters_4.png-3bf5f87a74fea269e34ad348a7349b9b.bptc.ctex"
+path.astc="res://.godot/imported/carriage_quarters_4.png-3bf5f87a74fea269e34ad348a7349b9b.astc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/sprites/train/carriage_quarters_4.png"
-dest_files=["res://.godot/imported/carriage_quarters_4.png-3bf5f87a74fea269e34ad348a7349b9b.ctex"]
+dest_files=["res://.godot/imported/carriage_quarters_4.png-3bf5f87a74fea269e34ad348a7349b9b.bptc.ctex", "res://.godot/imported/carriage_quarters_4.png-3bf5f87a74fea269e34ad348a7349b9b.astc.ctex"]
 
 [params]
 

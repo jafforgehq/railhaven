@@ -2,9 +2,9 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cs6c0n3qi2y7y"
-path.bptc="res://.godot/imported/rod.png-b754816bd0d07e434aadb4dd345d328e.bptc.ctex"
-path.astc="res://.godot/imported/rod.png-b754816bd0d07e434aadb4dd345d328e.astc.ctex"
+uid="uid://bwgbifuxsxck3"
+path.bptc="res://.godot/imported/bogie2.png-3334150a7b73967addd3c49bd5be76bf.bptc.ctex"
+path.astc="res://.godot/imported/bogie2.png-3334150a7b73967addd3c49bd5be76bf.astc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
@@ -12,8 +12,8 @@ metadata={
 
 [deps]
 
-source_file="res://assets/sprites/train/rod.png"
-dest_files=["res://.godot/imported/rod.png-b754816bd0d07e434aadb4dd345d328e.bptc.ctex", "res://.godot/imported/rod.png-b754816bd0d07e434aadb4dd345d328e.astc.ctex"]
+source_file="res://assets/sprites/train/bogie2.png"
+dest_files=["res://.godot/imported/bogie2.png-3334150a7b73967addd3c49bd5be76bf.bptc.ctex", "res://.godot/imported/bogie2.png-3334150a7b73967addd3c49bd5be76bf.astc.ctex"]
 
 [params]
 

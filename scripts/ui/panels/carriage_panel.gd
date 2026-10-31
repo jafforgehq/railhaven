@@ -1,22 +1,29 @@
 class_name CarriagePanel
 extends BasePanel
-## Management sheet for one carriage: level preview, stats, crew slots, upgrade,
-## and for drone bays the auto-salvage loop.
+## One carriage in plain words: what it does, what it makes right now, who works
+## there (tap + to add, tap a worker to send them to rest) and one upgrade box.
+
+const PLAIN := {
+	"locomotive": "Pulls the whole train. Upgrading it grows the cargo hold (storage) and speed.",
+	"quarters": "Beds for survivors. More beds let more survivors join you.",
+	"greenhouse": "Workers grow food here. Everyone aboard eats.",
+	"recycler": "Workers clean water here. Everyone aboard drinks.",
+	"workshop": "Workers turn scrap into parts here. Parts are needed to build and upgrade.",
+	"cooling": "Keeps the train cool. Each module lets the train carry more carriages.",
+	"dronebay": "Drones fly out on their own and bring back scrap. Pilots make each trip bring more.",
+}
 
 var uid := 0
 var _type := ""
-var _stats: Array = [] # [labels, stat key]
-var _crew_row: HBoxContainer
-var _crew_title: Label
+var _main_text: Label
+var _sub_text: Label
+var _bar: ProgressBar
+var _slots_row: HBoxContainer
+var _slots_sig := ""
+var _benefit: Label
 var _cost_box: HBoxContainer
 var _upgrade: Button
 var _reason: Label
-var _salvage_bar: ProgressBar
-var _salvage_time: Label
-var _salvage_reward: Label
-var _repeat: CheckButton
-var _launch: Button
-var _crew_sig := ""
 
 
 func build() -> void:
@@ -25,184 +32,158 @@ func build() -> void:
 		return
 	_type = c["type"]
 	var d: Dictionary = Data.CARRIAGES[_type]
-	var head := header(d["icon"], "%s   Lv.%d" % [d["name"].to_upper(), c["level"]], d["desc"])
-	head.get_child(1).get_child(0).add_theme_color_override("font_color", UIKit.TEXT)
+	header(d["icon"], "%s  ·  Lv.%d" % [d["name"].to_upper(), c["level"]], PLAIN[_type])
 
-	# Level previews.
-	var lv: int = c["level"]
-	var prev := UIKit.hbox(8)
-	prev.alignment = BoxContainer.ALIGNMENT_CENTER
-	prev.add_child(UIKit.vbox(2, [UIKit.label("Level %d" % lv, "Small", HORIZONTAL_ALIGNMENT_CENTER), Preview.make(_type, lv, 0.62)]))
-	if lv < Data.MAX_LEVEL:
-		var arrow := UIKit.label("→", "Title")
-		arrow.add_theme_color_override("font_color", UIKit.TEAL)
-		prev.add_child(arrow)
-		var nl := UIKit.label("Level %d" % (lv + 1), "Small", HORIZONTAL_ALIGNMENT_CENTER)
-		nl.add_theme_color_override("font_color", UIKit.TEAL)
-		prev.add_child(UIKit.vbox(2, [nl, Preview.make(_type, lv + 1, 0.62)]))
-	add_child(prev)
-
+	# What it does right now.
+	_main_text = UIKit.label("", "Header")
+	_main_text.add_theme_font_size_override("font_size", 28)
+	_sub_text = UIKit.label("", "Small")
+	var col := UIKit.vbox(2, [_main_text, _sub_text])
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var main_icon: String = d.get("res", d["icon"])
+	var box := UIKit.vbox(6, [UIKit.hbox(12, [Icon.make(main_icon, 48), col])])
 	if _type == "dronebay":
-		_build_salvage()
+		_bar = UIKit.bar(0.0, UIKit.GOLD, 14)
+		box.add_child(_bar)
+	add_child(UIKit.panel("Card", box))
 
-	_stats.clear()
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 8)
-	grid.add_theme_constant_override("v_separation", 8)
-	add_child(grid)
-	for s in _stat_defs():
-		_stats.append([stat_row(s[0], s[1], "", "", grid), s[2]])
-
+	# Workers as slots.
 	if Data.slots(_type, 1) > 0:
-		_crew_title = UIKit.label("", "Small")
-		_crew_row = UIKit.hbox(6)
-		var scroll := ScrollContainer.new()
-		scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-		scroll.custom_minimum_size.y = 56
-		scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		scroll.add_child(_crew_row)
-		add_child(UIKit.hbox(10, [UIKit.vbox(0, [UIKit.label("CREW", "Small"), _crew_title]), scroll]))
-		_crew_sig = ""
+		var t := UIKit.label("WORKERS", "Small")
+		t.add_theme_color_override("font_color", UIKit.GOLD)
+		_slots_row = UIKit.hbox(8)
+		add_child(UIKit.vbox(4, [t, _slots_row]))
+		_slots_sig = ""
 
+	# One upgrade box.
+	_benefit = UIKit.wrap_label("", "")
+	_benefit.add_theme_font_size_override("font_size", 21)
 	_cost_box = UIKit.hbox(8)
-	_cost_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_reason = UIKit.label("", "Small")
+	_reason.add_theme_color_override("font_color", UIKit.ORANGE)
 	_upgrade = UIKit.button("UPGRADE", "GoldButton", "up", 62)
-	_upgrade.custom_minimum_size.x = 250
+	_upgrade.custom_minimum_size.x = 210
 	_upgrade.pressed.connect(func():
 		if not Game.upgrade(uid):
 			Audio.play("error"))
-	add_child(HSeparator.new())
-	add_child(UIKit.hbox(10, [UIKit.vbox(0, [_cost_box, _reason]), _upgrade]))
+	main.register_target("upgrade", _upgrade)
+	var left := UIKit.vbox(4, [_benefit, _cost_box, _reason])
+	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	add_child(UIKit.panel("CardGold", UIKit.hbox(10, [left, _upgrade])))
 
 
-func _build_salvage() -> void:
-	_salvage_bar = UIKit.bar(0.0, UIKit.GOLD, 16)
-	_salvage_time = UIKit.label("", "Value")
-	_salvage_time.custom_minimum_size.x = 130
-	_salvage_time.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_salvage_reward = UIKit.label("", "")
-	_repeat = CheckButton.new()
-	_repeat.text = "Repeat"
-	_repeat.focus_mode = Control.FOCUS_NONE
-	_repeat.toggled.connect(func(on):
-		Audio.play("ui_click")
-		Game.set_repeat(uid, on))
-	_launch = UIKit.button("LAUNCH", "TealButton", "drone", 50)
-	_launch.pressed.connect(func(): Game.launch(uid); Audio.play("drone_launch"))
-	var title := UIKit.label("AUTO SALVAGE · RUINED FOUNDRY", "Small")
-	title.add_theme_color_override("font_color", UIKit.GOLD)
-	var box := UIKit.vbox(6, [title, UIKit.hbox(10, [_salvage_bar, _salvage_time]),
-		UIKit.hbox(10, [Icon.make("scrap", 24), _salvage_reward, UIKit.spacer(), _launch, _repeat])])
-	add_child(UIKit.panel("Card", box))
-
-
-func _stat_defs() -> Array:
+func _status(c: Dictionary) -> Array:
+	var lv: int = c["level"]
+	var n := Game.workers_in(uid).size()
 	match _type:
 		"greenhouse", "recycler", "workshop":
 			var res: String = Data.CARRIAGES[_type]["res"]
-			return [[res, "%s / min" % Data.RES_NAMES[res], "output"], ["crew", "Worker slots", "slots"], ["home", "Storage", "storage"]]
+			var per_min := Game.carriage_output(c)
+			if n == 0:
+				return ["Makes nothing yet", "Add a worker below to start making %s" % Data.RES_NAMES[res].to_lower()]
+			var extra := " (uses %.1f scrap/min)" % (per_min * Data.SCRAP_PER_PART) if _type == "workshop" else ""
+			return ["Makes %.1f %s / min" % [per_min, Data.RES_NAMES[res].to_lower()], "with %d worker%s%s" % [n, "" if n == 1 else "s", extra]]
 		"quarters":
-			return [["bed", "Beds", "beds"]]
+			return ["%d beds" % Data.beds(lv), "%d of %d beds used on the whole train" % [Game.survivors.size(), Game.capacity()]]
 		"cooling":
-			return [["cooling", "Carriage cap", "cooling"], ["crew", "Staffed bonus", "tech"]]
+			return ["Room for +%d carriages" % Data.cooling_capacity(lv, n > 0), "A worker here adds +1 more"]
 		"dronebay":
-			return [["drone", "Drones", "drones"], ["scrap", "Scrap / run", "run"], ["crew", "Pilot slots", "slots"]]
+			if Game.drones_grounded():
+				return ["Drones grounded", "Waiting for the sandstorm to pass"]
+			var left := Data.DRONE_RUN_TIME - float(c["timer"])
+			return ["+%d scrap in %s" % [int(Game.drone_yield(c) * Game.efficiency()), UIKit.fmt_time(left)], "%d drone%s · trips repeat automatically" % [Data.drones(lv), "" if Data.drones(lv) == 1 else "s"]]
 		"locomotive":
-			return [["home", "Cargo hold", "cargo"], ["train", "Speed km/h", "speed"]]
-	return []
+			return ["Storage x%.1f" % Data.loco_mult(lv), "Speed %d km/h" % int(Game.train_speed() * 360.0)]
+	return ["", ""]
 
 
-func _stat_value(key: String, l: int) -> String:
-	var c := Game.carriage(uid)
-	match key:
-		"output":
-			var mult := Game.water_mult() if _type == "recycler" else 1.0
-			return "%.1f" % (Game.worker_power(c) * Data.worker_rate(_type, l) * Game.efficiency() * mult * 60.0)
-		"slots":
-			return str(Data.slots(_type, l))
-		"storage":
-			return "+%d" % int(Data.storage_bonus(_type, l)[Data.CARRIAGES[_type]["res"]])
-		"beds":
-			return str(Data.beds(l))
+func _benefit_text(lv: int) -> String:
+	var parts: PackedStringArray = []
+	match _type:
+		"greenhouse", "recycler", "workshop":
+			parts.append("+40% output per worker")
+			if Data.slots(_type, lv + 1) > Data.slots(_type, lv):
+				parts.append("+1 worker slot")
+			parts.append("more storage")
+		"quarters":
+			parts.append("+%d beds" % (Data.beds(lv + 1) - Data.beds(lv)))
 		"cooling":
-			return "+%d" % Data.cooling_capacity(l, not Game.workers_in(uid).is_empty())
-		"tech":
-			return "+1"
-		"drones":
-			return str(Data.drones(l))
-		"run":
-			return str(int(Data.drones(l) * Data.DRONE_YIELD * (1.0 + 0.25 * Game.worker_power(c))))
-		"cargo":
-			return "x%.1f" % Data.loco_mult(l)
-		"speed":
-			return str(int(Data.TRAIN_SPEED * (1.0 + 0.1 * (l - 1)) * 360.0))
-	return ""
+			parts.append("room for +1 carriage")
+		"dronebay":
+			parts.append("+1 drone (more scrap per trip)")
+			if Data.slots(_type, lv + 1) > Data.slots(_type, lv):
+				parts.append("+1 pilot slot")
+			parts.append("more scrap storage")
+		"locomotive":
+			parts.append("+50% storage for everything")
+			parts.append("faster journey")
+	return "Upgrade to Lv.%d: %s" % [lv + 1, ", ".join(parts)]
 
 
 func refresh() -> void:
 	var c := Game.carriage(uid)
 	if c.is_empty():
 		return
+	var s := _status(c)
+	_main_text.text = s[0]
+	_sub_text.text = s[1]
+	if _bar:
+		_bar.value = float(c["timer"]) / Data.DRONE_RUN_TIME if c["active"] else 0.0
+	if _slots_row:
+		_refresh_slots(c)
 	var lv: int = c["level"]
-	for s in _stats:
-		var labels: Array = s[0]
-		labels[0].text = _stat_value(s[1], lv)
-		if lv < Data.MAX_LEVEL:
-			labels[1].text = _stat_value(s[1], lv + 1)
-			labels[2].text = "→" if labels[1].text != labels[0].text else ""
-			if labels[2].text == "":
-				labels[1].text = ""
-
-	if _crew_row:
-		_refresh_crew(c)
-
-	if _salvage_bar:
-		var active: bool = c["active"]
-		_salvage_bar.value = c["timer"] / Data.DRONE_RUN_TIME if active else 0.0
-		if Game.drones_grounded():
-			_salvage_time.text = "Grounded"
-		elif active:
-			_salvage_time.text = UIKit.fmt_time(Data.DRONE_RUN_TIME - c["timer"])
-		else:
-			_salvage_time.text = "Idle"
-		_salvage_reward.text = "+%d scrap per run" % int(Game.drone_yield(c) * Game.efficiency())
-		_repeat.set_pressed_no_signal(c["repeat"])
-		_launch.visible = not active
-
 	UIKit.clear(_cost_box)
 	if lv >= Data.MAX_LEVEL:
-		_cost_box.add_child(UIKit.label("Maximum level reached", "Accent"))
+		_benefit.text = "Fully upgraded"
 		_upgrade.disabled = true
 		_reason.text = ""
 	else:
+		_benefit.text = _benefit_text(lv)
 		_cost_box.add_child(UIKit.cost_row(Data.upgrade_cost(_type, lv), 26))
 		var why := Game.upgrade_block_reason(uid)
 		_upgrade.disabled = why != ""
-		_reason.text = why
+		_reason.text = "Not enough resources yet" if why == "Not enough resources" else why
 
 
-func _refresh_crew(c: Dictionary) -> void:
+func _refresh_slots(c: Dictionary) -> void:
 	var workers := Game.workers_in(uid)
 	var slots := Data.slots(_type, c["level"])
 	var sig := "%s|%d|%d" % [str(workers.map(func(s): return s["id"])), slots, Game.idle_survivors().size()]
-	_crew_title.text = "%d / %d" % [workers.size(), slots]
-	if sig == _crew_sig:
+	if sig == _slots_sig:
 		return
-	_crew_sig = sig
-	UIKit.clear(_crew_row)
+	_slots_sig = sig
+	UIKit.clear(_slots_row)
 	var want: String = Data.CARRIAGES[_type].get("role", "")
 	for s in workers:
-		var b := UIKit.button(s["name"] + ("  ★" if s["role"] == want else ""), "", "minus", 52)
-		b.tooltip_text = "Unassign"
+		var p := Portrait.new()
+		p.look = s["look"]
+		p.role = s["role"]
+		p.custom_minimum_size = Vector2(52, 52)
+		var name := UIKit.label(s["name"] + (" ★" if s["role"] == want else ""), "Small")
+		name.add_theme_color_override("font_color", UIKit.TEXT)
+		var b := Button.new()
+		b.theme_type_variation = "Button"
+		b.focus_mode = Control.FOCUS_NONE
+		b.mouse_filter = Control.MOUSE_FILTER_PASS
+		b.custom_minimum_size = Vector2(150, 64)
+		b.tooltip_text = "Tap to send to rest"
+		var row := UIKit.hbox(6, [p, name])
+		b.add_child(row)
+		row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		row.offset_left = 6
 		var sid: int = s["id"]
-		b.pressed.connect(func(): Game.assign(sid, 0))
-		_crew_row.add_child(b)
-	if workers.size() < slots:
+		b.pressed.connect(func():
+			Audio.play("ui_click")
+			Game.assign(sid, 0))
+		_slots_row.add_child(b)
+	var first_empty := true
+	for i in slots - workers.size():
 		var idle := Game.idle_survivors()
-		var add := UIKit.button("ASSIGN" if not idle.is_empty() else "No resting crew", "GreenButton" if not idle.is_empty() else "", "plus", 52)
+		var add := UIKit.button("+", "GreenButton" if not idle.is_empty() else "", "", 64)
+		add.custom_minimum_size = Vector2(64, 64)
+		add.add_theme_font_size_override("font_size", 34)
 		add.disabled = idle.is_empty()
+		add.tooltip_text = "Add a resting survivor" if not idle.is_empty() else "Nobody is resting"
 		add.pressed.connect(func():
 			var pool := Game.idle_survivors()
 			if pool.is_empty():
@@ -213,4 +194,12 @@ func _refresh_crew(c: Dictionary) -> void:
 					best = s
 					break
 			Game.assign(best["id"], uid))
-		_crew_row.add_child(add)
+		_slots_row.add_child(add)
+		if first_empty:
+			main.register_target("assign_slot", add)
+			first_empty = false
+	if workers.size() < slots and Game.idle_survivors().is_empty():
+		var note := UIKit.label("Everyone is busy. More survivors join when there are free beds.", "Small")
+		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		note.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_slots_row.add_child(note)

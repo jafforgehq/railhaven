@@ -9,7 +9,7 @@ var _sub: Label
 
 
 func build() -> void:
-	var row := header("wrench", "ADD A CARRIAGE", "Expand your train. Every carriage needs cooling capacity.")
+	var row := header("hammer", "ADD A CARRIAGE", " ")
 	_sub = row.get_child(1).get_child(1)
 	var scroll := ScrollContainer.new()
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -21,10 +21,8 @@ func build() -> void:
 		var d: Dictionary = Data.CARRIAGES[t]
 		var name := UIKit.label(d["name"].to_upper(), "Header")
 		name.add_theme_font_size_override("font_size", 25)
-		var desc := UIKit.wrap_label(d["desc"], "Small")
+		var desc := UIKit.wrap_label(CarriagePanel.PLAIN[t], "Small")
 		desc.custom_minimum_size = Vector2(220, 64)
-		var perk := UIKit.label(_perk(t), "Accent")
-		perk.add_theme_font_size_override("font_size", 21)
 		var cost := UIKit.hbox(0)
 		var why := UIKit.label("", "Small")
 		why.add_theme_color_override("font_color", UIKit.ORANGE)
@@ -36,26 +34,21 @@ func build() -> void:
 				Audio.play("error")
 			else:
 				main.open_carriage(uid))
-		var box := UIKit.vbox(6, [Preview.make(t, 1, 0.92), UIKit.hbox(6, [Icon.make(d["icon"], 26, UIKit.TEAL), name]), desc, perk, cost, why, btn])
+		var box := UIKit.vbox(6, [Preview.make(t, 1, 0.92), UIKit.hbox(6, [Icon.make(d["icon"], 28), name]), desc, cost, why, btn])
 		var card := UIKit.panel("Card", box)
 		card.custom_minimum_size.x = 246
 		cards.add_child(card)
 		_cards[t] = [cost, why, btn]
-
-
-func _perk(t: String) -> String:
-	match t:
-		"quarters": return "+%d beds" % Data.beds(1)
-		"greenhouse": return "+%.0f food/min per worker" % (Data.worker_rate("greenhouse", 1) * 60)
-		"recycler": return "+%.1f water/min per worker" % (Data.worker_rate("recycler", 1) * 60)
-		"workshop": return "+%.0f parts/min per worker" % (Data.worker_rate("workshop", 1) * 60)
-		"cooling": return "+%d carriage capacity" % Data.cooling_capacity(1, false)
-		"dronebay": return "+1 salvage drone"
-	return ""
+		main.register_target("build_" + t, btn)
+		var g := Game.current_goal()
+		if g.get("kind", "") == "build" and g.get("arg", "") == t:
+			card.theme_type_variation = "CardTeal"
+			scroll.ensure_control_visible.call_deferred(card)
 
 
 func refresh() -> void:
-	_sub.text = "Cooling %d/%d used · Train %d/%d carriages" % [Game.cooling_used(), Game.cooling_capacity(), Game.carriages.size() - 1, Data.MAX_CARRIAGES]
+	var room := maxi(0, Game.cooling_capacity() - Game.cooling_used())
+	_sub.text = "Room for %d more carriage%s. Cooling Modules make room for more." % [room, "" if room == 1 else "s"]
 	for t in _cards:
 		var parts: Array = _cards[t]
 		UIKit.clear(parts[0])

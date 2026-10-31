@@ -2,23 +2,21 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://7cs3i15312xj"
-path.bptc="res://.godot/imported/wheel_big.png-dda8b9f5ad1e35cc7b2c340076afdeaf.bptc.ctex"
-path.astc="res://.godot/imported/wheel_big.png-dda8b9f5ad1e35cc7b2c340076afdeaf.astc.ctex"
+uid="uid://deebpt1kvm8wl"
+path="res://.godot/imported/icon_bulb.png-f216fef10939803b8a476867f81ef4fc.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc", "etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/train/wheel_big.png"
-dest_files=["res://.godot/imported/wheel_big.png-dda8b9f5ad1e35cc7b2c340076afdeaf.bptc.ctex", "res://.godot/imported/wheel_big.png-dda8b9f5ad1e35cc7b2c340076afdeaf.astc.ctex"]
+source_file="res://assets/sprites/icons/icon_bulb.png"
+dest_files=["res://.godot/imported/icon_bulb.png-f216fef10939803b8a476867f81ef4fc.ctex"]
 
 [params]
 
-compress/mode=2
-compress/high_quality=true
+compress/mode=0
+compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0

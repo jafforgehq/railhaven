@@ -173,6 +173,8 @@ static func settings(main: Node) -> void:
 	sfx.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var credits := UIKit.wrap_label("Railhaven: Scorched Line · first playable. Music: \"Lone Scavenger\" by vitalezzz (CC0). Fanfare: \"Smooth Guitar Fanfare\" by OwlishMedia (CC BY 4.0). Wind: \"Wind Loop\" by AntumDeluge from InspectorJ (CC BY 3.0). SFX: Kenney, Wikimedia Commons and OpenGameArt contributors (CC0). Font: Barlow Condensed (OFL). Full list in assets/audio/CREDITS.md.", "Small")
 	v.add_child(credits)
+	var how := UIKit.button("HOW TO PLAY", "", "bulb", 58)
+	v.add_child(how)
 	var reset := UIKit.button("RESET PROGRESS", "RedButton", "warning", 58)
 	var close := UIKit.button("CLOSE", "TealButton", "", 58)
 	v.add_child(UIKit.hbox(10, [reset, close]))
@@ -180,6 +182,9 @@ static func settings(main: Node) -> void:
 	close.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var panel := _wrap(main, v)
 	close.pressed.connect(func(): main.close_modal_of(panel))
+	how.pressed.connect(func():
+		main.close_modal_of(panel)
+		how_to_play(main))
 	reset.pressed.connect(func(): _confirm_reset(main, panel))
 
 
@@ -266,3 +271,27 @@ static func goals(main: Node) -> void:
 	v.add_child(close)
 	var panel := _wrap(main, v)
 	close.pressed.connect(func(): main.close_modal_of(panel))
+
+
+# ---------------------------------------------------------------- how to play
+
+static func how_to_play(main: Node) -> void:
+	var v := _modal_box(600)
+	v.add_child(_title("HOW TO PLAY", "Keep the last train alive"))
+	for step in [
+		["drone", "Drones fly out on their own and bring back scrap."],
+		["parts", "Workers in the Workshop turn scrap into parts."],
+		["hammer", "Spend scrap and parts to build and upgrade carriages."],
+		["crew", "Food, water and beds let survivors join. Tap a carriage, then + to give them work."],
+		["tower", "Goal: reach the Climate Tower and restore it with drone expeditions."],
+		["star", "Not sure what to do? Follow NEXT STEP at the top and tap GO."],
+	]:
+		var l := UIKit.wrap_label(step[1], "")
+		l.add_theme_font_size_override("font_size", 23)
+		v.add_child(UIKit.panel("Card", UIKit.hbox(14, [Icon.make(step[0], 48), l])))
+	var ok := UIKit.button("LET'S GO", "TealButton", "", 66)
+	v.add_child(ok)
+	var panel := _wrap(main, v, false)
+	ok.pressed.connect(func():
+		Game.intro_seen = true
+		main.close_modal_of(panel))

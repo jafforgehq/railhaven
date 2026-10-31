@@ -46,7 +46,7 @@ var _target_x := NAN
 var _target_y := TRAIN_MID_Y
 var _target_zoom := MAX_ZOOM
 var _band_mid := 490.0
-var _cam := Vector2(150, TRAIN_MID_Y)
+var _cam := Vector2(118, TRAIN_MID_Y)
 
 
 func _ready() -> void:
@@ -113,22 +113,22 @@ func _soft_dot() -> Texture2D:
 func _build_fx() -> void:
 	_smoke = CPUParticles2D.new()
 	_smoke.texture = _soft_dot()
-	_smoke.amount = 60
+	_smoke.amount = 36
 	_smoke.lifetime = 4.0
-	_smoke.position = Vector2(47, -136)
+	_smoke.position = Vector2(101, -148)
 	_smoke.direction = Vector2(0.2, -1)
 	_smoke.spread = 12.0
 	_smoke.initial_velocity_min = 20.0
 	_smoke.initial_velocity_max = 30.0
 	_smoke.gravity = Vector2(32, 4)
-	_smoke.scale_amount_min = 1.0
-	_smoke.scale_amount_max = 1.6
+	_smoke.scale_amount_min = 0.7
+	_smoke.scale_amount_max = 1.1
 	var sc := Curve.new()
 	sc.add_point(Vector2(0, 0.5))
 	sc.add_point(Vector2(1, 3.2))
 	_smoke.scale_amount_curve = sc
 	var ramp := Gradient.new()
-	ramp.set_color(0, Color(0.16, 0.14, 0.13, 0.85))
+	ramp.set_color(0, Color(0.22, 0.2, 0.19, 0.6))
 	ramp.set_color(1, Color(0.35, 0.28, 0.24, 0.0))
 	_smoke.color_ramp = ramp
 	_smoke.z_index = 2
