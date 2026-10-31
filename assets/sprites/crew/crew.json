@@ -1,0 +1,43 @@
+{
+ "anims": [
+  "idle",
+  "walk",
+  "carry",
+  "hammer",
+  "tend",
+  "panel",
+  "wrench",
+  "sit"
+ ],
+ "cols": 8,
+ "presets": [
+  "engineer_a",
+  "engineer_b",
+  "grower_a",
+  "grower_b",
+  "mechanic_a",
+  "mechanic_b",
+  "pilot_a",
+  "pilot_b",
+  "technician_a",
+  "technician_b"
+ ],
+ "frame": [
+  160,
+  200
+ ],
+ "sleep_frame": [
+  240,
+  120
+ ],
+ "counts": {
+  "idle": 6,
+  "walk": 8,
+  "carry": 8,
+  "hammer": 8,
+  "tend": 8,
+  "panel": 6,
+  "wrench": 6,
+  "sit": 6
+ }
+}

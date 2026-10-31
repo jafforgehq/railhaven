@@ -1,0 +1,15 @@
+#!/bin/sh
+# Rebuild every Blender-made asset for Railhaven and copy it into assets/sprites/.
+# Usage: art/build_all.sh [path-to-Blender]   (Godot reimports the PNGs on next launch)
+set -e
+cd "$(dirname "$0")/.."
+BLENDER="${1:-/Applications/Blender.app/Contents/MacOS/Blender}"
+TMP="$(mktemp -d)"
+run() { "$BLENDER" -b --factory-startup --python "art/blender/$1" -- "$TMP/$2" >/dev/null; }
+run crew.py crew
+python3 art/build_sprites.py "$TMP/crew" assets/sprites/crew
+run carriages.py train && mkdir -p assets/sprites/train && cp "$TMP"/train/*.png assets/sprites/train/
+run scenery.py scenery && mkdir -p assets/sprites/scenery && cp "$TMP"/scenery/*.png assets/sprites/scenery/
+run icons.py icons && mkdir -p assets/sprites/icons && cp "$TMP"/icons/*.png assets/sprites/icons/
+rm -rf "$TMP"
+echo "art rebuilt"
