@@ -4,7 +4,7 @@ extends Control
 ## outside temperature and event / safe-mode status. Tapping a resource explains it.
 
 const TIPS := {
-	"scrap": "Scrap: drones bring it in automatically. You build with it, and the Workshop turns it into parts.",
+	"scrap": "Scrap: drones bring it in automatically. You build with it, and the Workshop turns it into parts. The small number is the change per minute.",
 	"parts": "Parts: made in the Workshop from scrap. Needed for building and upgrading carriages.",
 	"food": "Food: grown in the Greenhouse. Every survivor eats a little each minute.",
 	"water": "Water: cleaned in the Water Recycler. Every survivor drinks a little each minute.",
@@ -148,18 +148,13 @@ func refresh() -> void:
 		var v: float = Game.res[k]
 		var cap := Game.storage(k)
 		chip[0].text = UIKit.fmt(v)
-		var note := ""
-		var col := UIKit.TEXT
-		if v >= cap - 0.5 and r[k] >= 0.0:
-			note = "MAX"
-			col = UIKit.GOLD
-		elif r[k] < -0.05 and v < cap * 0.3:
-			note = "LOW"
-			col = UIKit.RED
-		chip[0].add_theme_color_override("font_color", col)
-		chip[1].text = note
-		chip[1].add_theme_color_override("font_color", col)
-		chip[1].visible = note != ""
+		# Value turns gold when storage is full, red when it is running low.
+		var full: bool = v >= cap - 0.5 and r[k] >= 0.0
+		var low: bool = r[k] < -0.05 and v < cap * 0.3
+		chip[0].add_theme_color_override("font_color", UIKit.GOLD if full else (UIKit.RED if low else UIKit.TEXT))
+		# Per-minute change: green gain, red loss, MAX when nothing more fits.
+		chip[1].text = "MAX" if full else UIKit.fmt_rate(r[k])
+		chip[1].add_theme_color_override("font_color", UIKit.GOLD if full else (UIKit.GREEN if r[k] > 0.05 else (UIKit.RED if r[k] < -0.05 else UIKit.MUTED)))
 	_crew_label.text = "%d/%d" % [Game.survivors.size(), Game.capacity()]
 
 	var g := Game.current_goal()
