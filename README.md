@@ -7,6 +7,26 @@ heat gauge reaches 70 °C. Wins earn parts that restore the train, region by reg
 by restoring a landmark. The idle colony version is preserved at git tag `v0.1-idle`.
 All art is made in **Blender** from Python scripts in `art/blender/`.
 
+Current version: **0.0.3** (iOS build 9), distributed through TestFlight.
+
+## Screenshots
+
+<p>
+<img src="docs/screenshots/01_home.jpg" width="180" alt="Home: the train and the next restoration task">
+<img src="docs/screenshots/02_boss_level.jpg" width="180" alt="Landmark boss level with combo charges">
+<img src="docs/screenshots/03_conveyor.jpg" width="180" alt="Conveyor level">
+<img src="docs/screenshots/04_win.jpg" width="180" alt="Win popup with postcard and win streak">
+</p>
+<p>
+<img src="docs/screenshots/05_story_fox.jpg" width="180" alt="Restored carriages, Juno's story bubble and Sandy the fox">
+<img src="docs/screenshots/06_rescue.jpg" width="180" alt="Pull-the-pin rescue">
+<img src="docs/screenshots/07_race.jpg" width="180" alt="Weekly race">
+<img src="docs/screenshots/08_highlands.jpg" width="180" alt="Green Highlands, the last region">
+</p>
+
+Home · landmark boss with combo charges · conveyor level · win popup · Juno and Sandy the fox ·
+pull-the-pin rescue · weekly race · Green Highlands. Refresh them with the screenshot tour (see Test).
+
 ## Art pipeline (Blender only)
 
 ```bash
@@ -31,9 +51,9 @@ After adding new renders run `art/fix_imports.sh` to import them with those sett
 /Applications/Godot.app/Contents/MacOS/Godot --path . -e       # editor
 ```
 
-Controls: drag horizontally to pan along the train (mouse wheel works on desktop), tap a carriage to manage it,
-tap the dashed slot at the end of the train to add a carriage, bottom tabs switch Train / Crew / Journey.
-Tap the goal card to jump to wherever the current goal is solved.
+Controls: drag horizontally to pan along the train (mouse wheel works on desktop). Tap a carriage for its
+info and livery, and tap the dashed outline at the end of the train to see the next carriage being built.
+In a level, tap a tank to lift its top canisters, then tap another tank to pour.
 
 ## Core loop
 
@@ -64,14 +84,14 @@ outline that fills with parts, and every carriage climbs one level at a time to 
   scrap or watch an ad to cool 15 °C, or give up (costs a life). Every 10th level is a heatwave level
   (one more colour, double parts).
 - **Levels**: 1000 authored levels in `data/levels.json`, generated and proven solvable by
-  `python3 tools/gen_levels.py` (deterministic, per-level seeds, runs in parallel in ~1 s; the solver
-  obeys frozen and tagged tanks). Past 1000 they repeat from level 101 with shuffled colours.
+  `python3 tools/gen_levels.py` (deterministic, per-level seeds, runs in parallel in ~5 min; the solver
+  obeys every blocker, and `tests/solutions.json` replays its solutions on the real board). Past 1000 they repeat from level 101 with shuffled colours.
 - **Boosters**: Undo, Spare Tank (adds an empty tank), Heat Flush (−12 °C). Bought with scrap.
 - **Lives**: 5, one back every 20 min; refill with scrap or a rewarded ad.
 - **Condenser** (dedicated offline carriage): turns cool night air into scrap while you are away,
   8 h cap rising to 24 h with upgrades; a full tank adds a booster; ad doubles the claim.
 - **Cooling Core**: each level of it starts every puzzle 1 °C cooler.
-- **Daily drop**, settings (music, SFX, vibration), how-to-play, a level-1 coach tutorial.
+- Settings (music, SFX, vibration), how-to-play, a level-1 coach tutorial.
 - **Ads**: `scripts/autoloads/ads.gd` is a stub that grants rewards in test builds; plug AdMob in there.
 - **Saves**: JSON v3. Idle-version saves are kept as `railhaven_save.json.idle.bak`.
 
@@ -90,14 +110,18 @@ scripts/data.gd                 economy, boosters, Condenser, regions + restorat
 scripts/autoloads/game.gd       progress owner: tasks, lives, currencies, Condenser, levels, JSON save
 scripts/autoloads/ads.gd        rewarded-ad facade (test stub until AdMob is linked)
 scripts/autoloads/audio.gd      Music/SFX/Ambience buses, SFX pool, haptics, settings (ConfigFile)
+scripts/autoloads/meta.gd       calendar, streak, story, liveries, album, Heat Run, weekly race (class Meta)
 scripts/puzzle/board.gd         pure sort rules (SortBoard): pour, blockers, undo, win/stuck
 scripts/puzzle/puzzle_view.gd   draws tanks + canisters, tap input, pour arcs, seals
 scripts/puzzle/puzzle_screen.gd one level: heat gauge, cold snaps, boosters, win/overheat flow
 scripts/main.gd                 root: Home (HUD + home sheet) / Puzzle modes, modals, toasts, coach
 scripts/ui/                     theme/kit, icons, HUD, home sheet, popups, coach
-scripts/world/                  parallax scenery, carriage + locomotive cutaways, drones, heat glow
+scripts/world/                  parallax scenery, carriage + locomotive cutaways, ghost carriage, fox, heat glow
+scripts/rescue/rescue_game.gd   pull-the-pin rescue (RigidBody2D balls in its own SubViewport world)
 tools/gen_levels.py             level generator + solver -> data/levels.json
+tools/bump_version.py           bumps the version everywhere it lives (patch by default)
 tests/test_puzzle.gd            headless rules / level data / progress checks
+tests/test_rescue.gd            physics checks for the rescue layouts
 scripts/debug/shots.gd          dev-only screenshot tour (`-- --shots=<dir>` [--regions])
 ```
 
@@ -127,15 +151,36 @@ $G --path . -- --shots=/tmp/railhaven_shots              # screenshot every scre
 
 The screenshot tour plays on the real save slot with autosave off. It never writes the save, except through `reset_game()`.
 
-## Export (Android)
+## Versioning
 
-`export_presets.cfg` has an "Android" preset (arm64 + armv7, debug keystore from editor settings):
+Each update bumps only the patch number (0.0.2 → 0.0.3) and raises the iOS and Android build numbers:
+
+```bash
+python3 tools/bump_version.py          # patch (default); `minor` or `major` only when asked
+```
+
+## Export
+
+iOS (TestFlight): export the "iOS" preset to an Xcode project, archive it, then upload with
+`ci/ExportOptions.plist` (App Store Connect, automatic signing):
+
+```bash
+$G --headless --path . --export-release "iOS" build/ios/Railhaven.ipa
+cd build/ios
+xcodebuild -project Railhaven.xcodeproj -scheme Railhaven -configuration Release -destination "generic/platform=iOS" \
+  -archivePath Railhaven.xcarchive archive DEVELOPMENT_TEAM=R9QFVTDHY5 CODE_SIGN_STYLE=Automatic \
+  CODE_SIGN_IDENTITY="Apple Development" -allowProvisioningUpdates
+xcodebuild -exportArchive -archivePath Railhaven.xcarchive -exportOptionsPlist ../../ci/ExportOptions.plist \
+  -exportPath export -allowProvisioningUpdates      # uploads to App Store Connect
+```
+
+Android: the "Android" preset (arm64 + armv7) uses the debug keystore from editor settings:
 
 ```bash
 $G --headless --path . --export-debug "Android" export/Railhaven.apk
 ```
 
-Release builds need a release keystore set in the preset (see Godot docs). The iOS preset is not set up yet: it needs a Team ID.
+Release builds need a release keystore set in the preset (see Godot docs).
 
 ## Credits
 

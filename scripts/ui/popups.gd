@@ -74,6 +74,7 @@ static func win(main: Node, r: Dictionary) -> void:
 		var free: Array = Meta.streak_free().map(func(id): return Meta.PRE[id]["name"])
 		var sl := UIKit.label("WIN STREAK x%d · next level starts with %s" % [Meta.streak(), ", ".join(free)], "Accent", HORIZONTAL_ALIGNMENT_CENTER)
 		sl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		sl.size_flags_horizontal = Control.SIZE_EXPAND_FILL # a wrapping label in an HBox gets 0 width otherwise
 		sl.add_theme_color_override("font_color", UIKit.ORANGE)
 		v.add_child(UIKit.hbox(6, [Icon.make("streak", 30, UIKit.ORANGE), sl]))
 	var t := Game.current_task()
