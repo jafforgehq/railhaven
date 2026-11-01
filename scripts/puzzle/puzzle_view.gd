@@ -8,6 +8,7 @@ signal poured(from: int, to: int, result: Dictionary)
 signal selected_tank(index: int)
 signal invalid_move
 signal blocked(text: String) # a tap hit a blocker; the screen explains it
+signal target_picked(index: int) # a tank tapped while a charge waits for its target
 
 const DIR := "res://assets/sprites/puzzle/"
 const ART := Vector2(160, 420) # tank sprite size (px)
@@ -20,6 +21,10 @@ const FLY_TIME := 0.3
 var board: SortBoard
 var selected := -1
 var locked := false # input off during popups and the win sequence
+var boss := false # boss level: hazard rims on every tank
+var target_mode := "" # "magnet" while a charge waits for a tank tap
+var _targets: Array[Rect2] = [] # where each tank should be (conveyor slides _rects toward these)
+var _belt := 0.0 # conveyor belt scroll
 var _rects: Array[Rect2] = []
 var _lift: Array[float] = []
 var _shake: Array[float] = []
@@ -35,7 +40,8 @@ var _t := 0.0
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	for n in ["tank_back", "tank_front", "tank_seal", "canister_hidden", "board_bg", "tank_ice", "tank_tag", "canister_hot"] + Data.COLORS.map(func(c): return "canister_" + c):
+	for n in ["tank_back", "tank_front", "tank_seal", "canister_hidden", "board_bg", "tank_ice", "tank_tag", "canister_hot",
+			"canister_key", "tank_padlock", "canister_rust", "canister_part", "conveyor", "pipe_link", "tank_boss"] + Data.COLORS.map(func(c): return "canister_" + c):
 		var p: String = DIR + n + ".png"
 		if ResourceLoader.exists(p):
 			_tex[n] = load(p)
@@ -85,16 +91,23 @@ func _layout() -> void:
 	if th > max_h:
 		th = max_h
 		tw = th * ART.x / ART.y
-	_rects.clear()
 	if board.lock.any(func(x): return x >= 0):
 		row_gap += 10.0 # room for the tags hanging on the rims
+	_targets.clear()
 	var top := (size.y - (th * rows + row_gap * (rows - 1))) * 0.5 + 20.0
-	for r in rows:
+	var shift := board.shift()
+	for i in n:
+		var r := i / per_row
 		var count := per_row if r == 0 else n - per_row
 		var row_w := count * tw + (count - 1) * gap
 		var x0 := (size.x - row_w) * 0.5
-		for k in count:
-			_rects.append(Rect2(x0 + k * (tw + gap), top + r * (th + row_gap), tw, th))
+		var slot := (i % per_row + shift) % count # conveyor rows slide along
+		_targets.append(Rect2(x0 + slot * (tw + gap), top + r * (th + row_gap), tw, th))
+	if _rects.size() != n:
+		_rects = _targets.duplicate()
+	else:
+		for i in n:
+			_rects[i].size = _targets[i].size
 	queue_redraw()
 
 
@@ -134,11 +147,13 @@ func _hit(p: Vector2) -> int:
 
 
 func _tap(i: int) -> void:
-	if board.is_frozen(i):
+	if target_mode != "":
+		target_picked.emit(i)
+		return
+	if board.is_shut(i) or (selected < 0 and board.top_run(i) == 0 and not board.tanks[i].is_empty() and not board.is_complete(i)):
 		_shake[i] = 0.35
 		Audio.play("error")
-		var left := board.thaw_left(i)
-		blocked.emit("Frozen: seal %d more tank%s to thaw it" % [left, "" if left == 1 else "s"])
+		blocked.emit(board.block_reason(selected, i))
 		return
 	if selected < 0:
 		if board.tanks[i].is_empty() or board.is_complete(i) or _pending[i] > 0:
@@ -161,24 +176,30 @@ func _tap(i: int) -> void:
 			_shake[i] = 0.35
 			Audio.play("error")
 			invalid_move.emit()
-			if board.lock[i] >= 0 and board.tanks[i].size() < board.cap:
-				blocked.emit("Tagged tank: it only takes %s" % Data.COLORS[board.lock[i]])
+			var why := board.block_reason(from, i)
+			if why != "":
+				blocked.emit(why)
 		return
 	var color: int = board.tanks[from][-1]
 	var start_k: int = board.tanks[from].size() - 1
-	var dest_k: int = board.tanks[i].size()
+	var sizes: Array = board.tanks.map(func(t): return t.size())
 	var lift := _lift[from]
 	var result := board.pour(from, i)
-	for m in n:
+	var m := 0
+	for d in result["dests"]: # twins share a pour, so canisters can land in two tanks
 		var a := _slot_rect(from, start_k - m, lift)
-		var b := _slot_rect(i, dest_k + m)
-		_flying.append({"c": color, "from": a.position, "to": b.position, "size": a.size, "t": -m * 0.06, "tank": i})
-	_pending[i] += n
+		var b := _slot_rect(d, sizes[d])
+		sizes[d] += 1
+		_flying.append({"c": color, "from": a.position, "to": b.position, "size": a.size, "t": -m * 0.06, "tank": d})
+		_pending[d] += 1
+		m += 1
 	selected = -1
 	Audio.play("drone_launch", 0.15)
-	if result["completed"]:
-		_seal_later(i, FLY_TIME + n * 0.06)
+	for s in result["sealed"]:
+		_seal_later(s, FLY_TIME + n * 0.06)
 	poured.emit(from, i, result)
+	if board.conveyor > 0:
+		_layout()
 
 
 func _select(i: int) -> void:
@@ -201,6 +222,19 @@ func _seal_later(i: int, delay: float) -> void:
 			"v": Vector2(randf_range(-30, 30), randf_range(-90, -30)), "life": randf_range(0.5, 1.0)})
 
 
+## Sparkle burst over one tank (magnet) or every tank (frost charge).
+func burst_at(i: int, col := Color(1.0, 0.85, 0.5)) -> void:
+	var r := _rects[i]
+	for k in 22:
+		_sparks.append({"p": Vector2(r.get_center().x + randf_range(-r.size.x * 0.4, r.size.x * 0.4), r.position.y + randf_range(0, r.size.y)),
+			"v": Vector2(randf_range(-40, 40), randf_range(-110, -30)), "life": randf_range(0.5, 1.1), "c": col})
+
+
+func burst_all() -> void:
+	for i in _rects.size():
+		burst_at(i, Color(0.75, 0.95, 1.0))
+
+
 ## Rebuilds after undo or an added tank (no animation).
 func refresh_board() -> void:
 	selected = -1
@@ -210,6 +244,7 @@ func refresh_board() -> void:
 		_pending[i] = 0
 		_seal[i] = 1.0 if board.is_complete(i) else 0.0
 		_ice[i] = 1.0 if board.is_frozen(i) else 0.0
+	_rects.clear()
 	_layout()
 
 
@@ -227,6 +262,11 @@ func _process(delta: float) -> void:
 		_lift[i] = lerpf(_lift[i], 30.0 if i == selected else 0.0, 1.0 - exp(-delta * 18.0))
 		_shake[i] = maxf(0.0, _shake[i] - delta)
 		_ice[i] = move_toward(_ice[i], 1.0 if board.is_frozen(i) else 0.0, delta * 2.5)
+		if i < _targets.size() and i < _rects.size():
+			var p := _rects[i].position.lerp(_targets[i].position, 1.0 - exp(-delta * 7.0))
+			if p.distance_to(_targets[i].position) > 0.5:
+				_belt += (p.x - _rects[i].position.x) * 0.15
+			_rects[i].position = p
 	for f in _flying:
 		f["t"] += delta / FLY_TIME
 	var done := _flying.filter(func(f): return f["t"] >= 1.0)
@@ -252,6 +292,12 @@ func _draw() -> void:
 		draw_texture_rect(_tex["board_bg"], area, false, Color(1, 1, 1, 0.95))
 	else:
 		draw_style_box(UIKit.box(Color(0.05, 0.06, 0.08, 0.82), Color(1, 1, 1, 0.08), 18, 2), area)
+	if board.conveyor > 0:
+		_draw_belts()
+	var key_colors := {}
+	for i in board.tanks.size():
+		if board.is_keylocked(i):
+			key_colors[board.keylock[i]] = true
 	for i in _rects.size():
 		var off := Vector2(sin(_shake[i] * 60.0) * 6.0 * _shake[i] / 0.35, -_lift[i])
 		var r := Rect2(_rects[i].position + off, _rects[i].size)
@@ -262,13 +308,29 @@ func _draw() -> void:
 			var sr := _slot_rect(i, k, _lift[i])
 			sr.position.x += off.x
 			_draw_canister(sr, t[k], board.hidden[i][k], i == selected and k >= t.size() - board.top_run(i))
+			if board.hidden[i][k]:
+				continue
+			if board.rust[i][k]:
+				_overlay("canister_rust", sr, Color(0.62, 0.33, 0.16, 0.7))
+			var is_hot: bool = k < board.hot[i].size() and board.hot[i][k] > 0
+			if key_colors.has(t[k]) and not is_hot: # both badges use the top-right corner
+				_overlay("canister_key", sr, Color(0.9, 0.72, 0.3))
+			if board.part[i][k]:
+				_overlay("canister_part", sr, UIKit.GOLD)
 			if k < board.hot[i].size() and board.hot[i][k] > 0:
 				_draw_hot(sr, board.hot[i][k])
 		_draw_tank_front(r, _seal[i])
 		if _ice[i] > 0.0:
 			_draw_ice(r, board.thaw_left(i), _ice[i])
+		if board.is_keylocked(i):
+			_draw_padlock(r, board.keylock[i])
 		if board.lock[i] >= 0:
 			_draw_tag(r, board.lock[i])
+		if boss:
+			_overlay("tank_boss", r, Color(1, 0.3, 0.1, 0.4))
+		if target_mode != "" and not board.tanks[i].is_empty() and not board.is_complete(i):
+			draw_rect(r.grow(4), Color(1.0, 0.82, 0.4, 0.5 + 0.4 * sin(_t * 6.0)), false, 3.0)
+	_draw_twins()
 	for f in _flying:
 		var e := clampf(f["t"], 0.0, 1.0)
 		if f["t"] < 0.0:
@@ -278,7 +340,8 @@ func _draw() -> void:
 		_draw_canister(Rect2(p, f["size"]), f["c"], false, false)
 	for s in _sparks:
 		var a := clampf(s["life"], 0.0, 1.0)
-		draw_circle(s["p"], 2.5 * a + 0.5, Color(0.75, 0.95, 1.0, a))
+		var sc: Color = s.get("c", Color(0.75, 0.95, 1.0))
+		draw_circle(s["p"], 2.5 * a + 0.5, Color(sc.r, sc.g, sc.b, a))
 
 
 func _draw_tank_back(r: Rect2) -> void:
@@ -303,6 +366,76 @@ func _draw_tank_front(r: Rect2, seal: float) -> void:
 			var s2 := r.size.x / ART.x
 			draw_rect(Rect2(r.position + Vector2(4, 0) * s2, Vector2(152, 26) * s2), Color(0.7, 0.92, 1.0, seal))
 		draw_texture_rect(CarriageView.glow_texture(), r.grow(r.size.x * 0.3), false, Color(0.4, 0.85, 1.0, 0.18 * seal * (0.7 + 0.3 * sin(_t * 3.0))))
+
+
+## Sprite overlay, or a plain tinted frame until the art exists.
+func _overlay(key: String, r: Rect2, fallback: Color) -> void:
+	if _tex.has(key):
+		draw_texture_rect(_tex[key], r, false)
+	else:
+		draw_rect(r.grow(-3), fallback, false, 3.0)
+
+
+func _draw_padlock(r: Rect2, c: int) -> void:
+	_overlay("tank_padlock", r, Color(0.7, 0.72, 0.75, 0.9))
+	var s := r.size.x / ART.x
+	var cw := 40.0 * s
+	var ch := cw * SLOT_H / CAN_W
+	_draw_canister(Rect2(r.position + Vector2(80, 222) * s - Vector2(cw, ch) * 0.5, Vector2(cw, ch)), c, false, false)
+
+
+func _draw_twins() -> void:
+	for i in board.twin.size():
+		var p: int = board.twin[i]
+		if p <= i or p >= _rects.size():
+			continue
+		var left_i := i if _rects[i].position.x < _rects[p].position.x else p
+		var a := _rects[left_i]
+		var b := _rects[p if left_i == i else i]
+		var y := a.get_center().y + a.size.y * 0.18
+		var h := a.size.x * 0.3
+		var pr := Rect2(a.end.x - a.size.x * 0.12, y - h * 0.5, b.position.x - a.end.x + a.size.x * 0.24, h)
+		if _tex.has("pipe_link"):
+			# 24 px flanges stay fixed; only the plain middle of the 64 px sprite stretches.
+			var cap := minf(24.0 * h / 40.0, pr.size.x * 0.5)
+			var tex: Texture2D = _tex["pipe_link"]
+			draw_texture_rect_region(tex, Rect2(pr.position, Vector2(cap, h)), Rect2(0, 0, 24, 40))
+			draw_texture_rect_region(tex, Rect2(pr.position + Vector2(cap, 0), Vector2(pr.size.x - cap * 2.0, h)), Rect2(24, 0, 16, 40))
+			draw_texture_rect_region(tex, Rect2(Vector2(pr.end.x - cap, pr.position.y), Vector2(cap, h)), Rect2(40, 0, 24, 40))
+		else:
+			draw_rect(pr, Color(0.35, 0.75, 0.95, 0.9))
+
+
+func _draw_belts() -> void:
+	var rows := {}
+	for i in _targets.size():
+		var y := _targets[i].end.y
+		rows[y] = rows.get(y, []) + [i]
+	for y in rows:
+		var xs: Array = rows[y].map(func(i): return _targets[i].position.x)
+		var x0: float = xs.min() - 10.0
+		var x1: float = xs.max() + _targets[rows[y][0]].size.x + 10.0
+		var h := 24.0
+		var belt := Rect2(x0, y - 8.0, x1 - x0, h)
+		if _tex.has("conveyor"):
+			var tw := h * 256.0 / 40.0
+			var x := x0 - fposmod(_belt, tw)
+			while x < x1:
+				var seg := Rect2(maxf(x, x0), belt.position.y, minf(x + tw, x1) - maxf(x, x0), h)
+				var src := Rect2((seg.position.x - x) / tw * 256.0, 0, seg.size.x / tw * 256.0, 40)
+				draw_texture_rect_region(_tex["conveyor"], seg, src)
+				x += tw
+		else:
+			draw_rect(belt, Color(0.12, 0.12, 0.14))
+
+
+## Draws a canister texture on another canvas item (the goal strip).
+func draw_canister_on(ci: CanvasItem, r: Rect2, c: int, alpha := 1.0) -> void:
+	var key: String = "canister_" + Data.COLORS[c]
+	if _tex.has(key):
+		ci.draw_texture_rect(_tex[key], r, false, Color(1, 1, 1, alpha))
+	else:
+		ci.draw_rect(r, Color(Data.COLOR_HEX[c], alpha))
 
 
 func _draw_ice(r: Rect2, left: int, a: float) -> void:

@@ -54,8 +54,11 @@ static func _ad_button(text: String) -> Button:
 static func win(main: Node, r: Dictionary) -> void:
 	var v := _modal_box(600)
 	v.add_child(_big_icon("snowflake", 110, Color("9fe6ff")))
-	v.add_child(_title("CARRIAGE COOLED!", "Level %d complete" % r["level"], UIKit.TEAL))
-	v.add_child(_reward_row([["parts", "+%d" % r["parts"]], ["scrap", "+%d" % r["scrap"]]]))
+	if r.get("boss", false):
+		v.add_child(_title("BOSS BEATEN!", "The %s can be restored" % Game.region()["landmark_name"], UIKit.GOLD))
+	else:
+		v.add_child(_title("CARRIAGE COOLED!", "Level %d complete" % r["level"], UIKit.TEAL))
+	v.add_child(_reward_row([["scrap", "+%d" % r["scrap"]], ["undo", "+1"], ["tank", "+1"]] if r.get("boss", false) else [["parts", "+%d" % r["parts"]], ["scrap", "+%d" % r["scrap"]]]))
 	if r["bonus"] > 0:
 		v.add_child(UIKit.label("Includes +%d scrap cool bonus for finishing below 70°C" % r["bonus"], "Small", HORIZONTAL_ALIGNMENT_CENTER))
 	if Meta.streak() > 0:
@@ -79,7 +82,9 @@ static func win(main: Node, r: Dictionary) -> void:
 	var panel := _wrap(main, v, false)
 	cont.pressed.connect(func():
 		main.close_modal_of(panel)
-		main.show_home())
+		main.show_home()
+		if r.get("boss", false):
+			Game.complete_task()) # restores the landmark; the region-complete moment follows
 
 
 static func overheated(main: Node, screen: Node, stuck := false) -> void:

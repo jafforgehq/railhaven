@@ -104,7 +104,7 @@ func refresh() -> void:
 		_task_hint.add_theme_color_override("font_color", UIKit.MUTED if why != "" else UIKit.GREEN)
 		_restore.visible = true
 		_restore.disabled = why != ""
-		_restore.get_meta("label").text = "RESTORE"
+		_restore.get_meta("label").text = "BOSS" if t.get("landmark", false) else "RESTORE"
 	var amount := Game.condenser_amount()
 	_cond.get_meta("label").text = ("FULL %d" % amount) if Game.condenser_full() else ("+%d" % amount if Game.condenser_ready() else "CONDENSER")
 	if not Game.has_condenser():
@@ -136,6 +136,9 @@ func _on_restore() -> void:
 			Audio.play("whistle")
 		return
 	var t := Game.current_task()
+	if t.get("landmark", false) and Game.task_block_reason() == "":
+		main.play([], true) # the landmark is won back in a boss level
+		return
 	if Game.complete_task():
 		Audio.play("build")
 	else:

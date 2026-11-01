@@ -90,7 +90,7 @@ func _tour() -> void:
 	await _shot("10_overheated", 1.2)
 	await _close_all(main)
 	# Blockers: frozen (with its first-time intro), tagged, hot, then a late mixed level.
-	for lv in [16, 46, 66, 850]:
+	for lv in [16, 46, 66, 81, 96, 111, 126, 141, 161]:
 		main.show_home()
 		Game.level = lv
 		main.play()
@@ -99,6 +99,12 @@ func _tour() -> void:
 		if lv == 66:
 			main.puzzle.board.hot[main.puzzle.board.hot.find(main.puzzle.board.hot.filter(func(r): return r.any(func(x): return x > 0))[0])] = main.puzzle.board.hot.filter(func(r): return r.any(func(x): return x > 0))[0].map(func(x): return 2 if x > 0 else 0)
 		await _shot("b%d" % lv, 0.6)
+	main.show_home()
+	main.play([], true)
+	await _shot("b_boss", 0.8)
+	main.puzzle.charges = {"magnet": 1, "frost": 1}
+	main.puzzle._update()
+	await _shot("b_boss_charges", 0.4)
 	main.show_home()
 	main.show_home()
 	Game.condenser_at = Game.now() - 6 * 3600.0

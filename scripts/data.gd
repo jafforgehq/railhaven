@@ -28,7 +28,41 @@ const BLOCKERS := {
 		"text": "A tag on the rim means this tank only accepts that one colour."},
 	"hot": {"title": "HOT CANISTER", "icon": "temp",
 		"text": "Seal its colour before the countdown runs out, or it flares and heats the carriage by %d°C." % int(HOT_FLARE)},
+	"keylock": {"title": "PADLOCKED TANK", "icon": "lock",
+		"text": "Chained shut. Seal a tank of the colour shown on the padlock (the canisters with keys) to open it."},
+	"rescue": {"title": "RESCUE DRONE PARTS", "icon": "drone",
+		"text": "Some canisters carry drone parts. Seal their colours to win, even with other tanks still mixed."},
+	"rust": {"title": "RUST", "icon": "wrench",
+		"text": "Rusted canisters are welded in place. Seal their tank or a tank beside them to scrub it off. Dawdle and it spreads."},
+	"conveyor": {"title": "CONVEYOR", "icon": "rail",
+		"text": "The tanks ride a conveyor belt and slide one place along every few pours. Keep an eye on them."},
+	"twin": {"title": "TWIN TANKS", "icon": "water",
+		"text": "Two tanks joined by a pipe share every pour into them, one canister each in turn."},
+	"order": {"title": "SEAL IN ORDER", "icon": "flag",
+		"text": "The first tanks you seal must follow the order at the top of the screen."},
 }
+
+## Blocker kinds present in a level (keys of BLOCKERS).
+static func level_blockers(data: Dictionary) -> Array:
+	var out := []
+	for kind in BLOCKERS:
+		match kind:
+			"hidden":
+				if data.has("hidden") and data["hidden"].any(func(r): return r.has(true)):
+					out.append(kind)
+			"rescue", "order":
+				if data.get("goal", {}).get("type", "") == ("colors" if kind == "rescue" else "order"):
+					out.append(kind)
+			_:
+				if data.has(kind):
+					out.append(kind)
+	return out
+
+
+const MAGNET_CHAIN := 2 # cold snap length that earns a Magnet charge
+const FROST_CHAIN := 3 # ... and a Frost Charge
+const FROST_CHARGE_COOL := 10.0
+const BOSS_REWARD := {"scrap": 300, "undo": 1, "tank": 1, "flush": 1}
 const COLORS := ["red", "orange", "yellow", "lime", "teal", "blue", "purple", "pink", "white"]
 const COLOR_HEX := ["e5484d", "f2873a", "f5cf3d", "8fd14f", "2fc2b0", "3f8cff", "9a5cf0", "f06fb4", "eef2f5"]
 

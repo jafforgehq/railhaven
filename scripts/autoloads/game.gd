@@ -35,6 +35,7 @@ var heat_visual := 0.0 # 0..1, set by the puzzle so the world can glow
 var autosave := true
 
 static var _levels: Array = []
+static var _bosses: Array = []
 var _save_accum := 0.0
 
 
@@ -244,6 +245,7 @@ static func _load_levels() -> void:
 	var d = JSON.parse_string(FileAccess.get_file_as_string(Data.LEVELS_PATH))
 	if typeof(d) == TYPE_DICTIONARY:
 		_levels = d["levels"]
+		_bosses = d.get("bosses", [])
 	if _levels.is_empty():
 		push_error("No levels found at %s" % Data.LEVELS_PATH)
 
@@ -270,9 +272,36 @@ static func level_data(n: int) -> Dictionary:
 		perm[j] = tmp
 	var out := src.duplicate(true)
 	out["tanks"] = src["tanks"].map(func(t): return t.map(func(x): return perm[int(x)]))
-	if src.has("lock"):
-		out["lock"] = src["lock"].map(func(x): return perm[int(x)] if int(x) >= 0 else -1)
+	for key in ["lock", "keylock"]:
+		if src.has(key):
+			out[key] = src[key].map(func(x): return perm[int(x)] if int(x) >= 0 else -1)
+	if src.has("goal"):
+		out["goal"]["colors"] = src["goal"]["colors"].map(func(x): return perm[int(x)])
 	return out
+
+
+## The landmark boss level of region r (tuned for the level players reach it at).
+static func boss_data(r: int) -> Dictionary:
+	_load_levels()
+	return _bosses[clampi(r, 0, _bosses.size() - 1)] if not _bosses.is_empty() else level_data(25)
+
+
+## Boss beaten: pays the boss reward. The landmark itself is restored when the player
+## returns home (complete_task), so the region-complete moment plays on the home screen.
+func win_boss(heat: float) -> Dictionary:
+	var bonus := maxi(0, int(Data.HEAT_MAX - heat)) * Data.COOL_BONUS_PER_DEG
+	var reward := {"parts": 0, "scrap": int(Data.BOSS_REWARD["scrap"]) + bonus, "bonus": bonus, "hard": true,
+		"level": level, "boss": true}
+	scrap += reward["scrap"]
+	for k in Data.BOSS_REWARD:
+		if k != "scrap":
+			boosters[k] = booster_count(k) + int(Data.BOSS_REWARD[k])
+	stats["wins"] += 1
+	stats["streak"] += 1
+	stats["best_streak"] = maxi(stats["best_streak"], stats["streak"])
+	save_game()
+	changed.emit()
+	return reward
 
 
 func is_hard(n: int) -> bool:

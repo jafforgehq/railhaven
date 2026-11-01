@@ -100,6 +100,71 @@ func _board_rules() -> void:
 	hf.undo()
 	check(hf.hot.size() == hf.tanks.size(), "undo after a spare tank keeps flags aligned")
 
+	# Padlocked tank opens when its colour is sealed.
+	var kl := SortBoard.new()
+	kl.load_level({"tanks": [[0, 0, 0], [0], [1, 1], []], "keylock": [-1, -1, -1, 0]})
+	check(kl.is_keylocked(3) and kl.can_pour(2, 3) == 0, "padlocked tank is shut")
+	r = kl.pour(1, 0)
+	check(r["thawed"] == [3] and kl.can_pour(2, 3) == 2, "sealing the key colour opens it")
+
+	# Rust welds a canister until its tank or a neighbour seals; it creeps when idle.
+	var ru := SortBoard.new()
+	ru.load_level({"tanks": [[2, 2, 2], [3, 1], [2], [1, 1, 1], []], "rust": [[], [false, true], [], [], []]})
+	check(ru.top_run(1) == 0 and ru.can_pour(1, 3) == 0, "rusted top canister cannot move")
+	r = ru.pour(2, 0)
+	check(r["completed"] and not ru.rust[1][1], "sealing the tank beside it scrubs the rust")
+	var rs := SortBoard.new()
+	rs.load_level({"tanks": [[0, 1, 0], [2, 3], [], []], "rust": [[true, false, false], [], [], []]})
+	rs.pour(1, 2)
+	rs.pour(2, 3)
+	rs.pour(3, 2)
+	var rusty := 0
+	for row in rs.rust:
+		rusty += row.count(true)
+	check(rusty == 2, "rust creeps after %d idle pours" % SortBoard.RUST_SPREAD)
+	rs.undo()
+	rusty = 0
+	for row in rs.rust:
+		rusty += row.count(true)
+	check(rusty == 1, "undo takes the creep back")
+
+	# Twin tanks share a pour one canister each.
+	var tw := SortBoard.new()
+	tw.load_level({"tanks": [[0, 0, 0, 0].slice(0, 3) + [], [], [], [1, 1]], "twin": [-1, 2, 1, -1]})
+	r = tw.pour(0, 1)
+	check(r["n"] == 3 and tw.tanks[1].size() == 2 and tw.tanks[2].size() == 1, "twins split a pour in turn")
+	tw.undo()
+	check(tw.tanks[0].size() == 3 and tw.tanks[1].is_empty() and tw.tanks[2].is_empty(), "undo gathers a split pour back")
+
+	# Conveyor: rows shift every N pours, undo slides back.
+	var cv := SortBoard.new()
+	cv.load_level({"tanks": [[0, 1], [1, 0], [], []], "conveyor": 2})
+	cv.pour(0, 2)
+	cv.pour(1, 3)
+	check(cv.shift() == 1, "conveyor shifts after 2 pours")
+	cv.undo()
+	check(cv.shift() == 0, "undo shifts back")
+
+	# Goals: rescue wins once its colours are sealed; order blocks out-of-turn seals.
+	var gc := SortBoard.new()
+	gc.load_level({"tanks": [[0, 0, 0], [0], [1, 2], [2, 1], []], "goal": {"type": "colors", "colors": [0]}})
+	gc.pour(1, 0)
+	check(gc.is_won(), "rescue goal wins with other tanks still mixed")
+	var go := SortBoard.new()
+	go.load_level({"tanks": [[0, 0, 0], [0], [1, 1, 1], [1]], "goal": {"type": "order", "colors": [1, 0]}})
+	check(go.can_pour(1, 0) == 0 and go.block_reason(1, 0).begins_with("Seal"), "order goal blocks sealing out of turn")
+	check(go.can_pour(3, 2) == 1, "the next colour in order may seal")
+
+	# Combo charges.
+	var mg := SortBoard.new()
+	mg.load_level({"tanks": [[1, 0], [2, 0], [0, 0], [], [1, 2, 1, 2]]})
+	var pulled := mg.magnet(2)
+	check(pulled.size() == 2 and mg.is_complete(2), "magnet pulls every matching top into the tank")
+	var fc := SortBoard.new()
+	fc.load_level({"tanks": [[0, 0, 0], [1, 1], []], "frozen": [0, 3, 0], "rust": [[true], [], []], "hot": [[0, 1, 2]]})
+	fc.frost_charge()
+	check(not fc.is_frozen(1) and not fc.rust[0][0] and fc.hot_left() == [7], "frost charge thaws, scrubs rust and buys time")
+
 	# Stuck detection and the spare tank.
 	var s := SortBoard.new()
 	s.load_level({"tanks": [[0, 1, 0, 1], [1, 0, 1, 0]]})
@@ -136,11 +201,41 @@ func _levels() -> void:
 	check(ok, "every level has 4 of each colour, an empty tank, sane blockers and a move budget >= its solution %s" % bad)
 	var first := {}
 	for i in range(1, n + 1):
-		var d: Dictionary = root.get_node("Game").level_data(i)
-		for k in ["frozen", "lock", "hot"]:
-			if d.has(k) and not first.has(k):
+		for k in Data.level_blockers(root.get_node("Game").level_data(i)):
+			if not first.has(k):
 				first[k] = i
-	check(first.get("frozen") == 16 and first.get("lock") == 46 and first.get("hot") == 66, "blockers arrive one at a time %s" % str(first))
+	var want := {"frozen": 16, "hidden": 31, "lock": 46, "hot": 66, "keylock": 81, "rescue": 96, "rust": 111, "conveyor": 126, "twin": 141, "order": 161}
+	check(first == want, "blockers arrive one at a time %s" % str(first))
+	for k in Data.BLOCKERS:
+		check(Data.BLOCKERS[k].has("text"), "intro text for %s" % k)
+	check(root.get_node("Game").boss_data(4).get("boss", false), "five landmark boss levels")
+
+	# Replay the generator's solutions on this board: proves the solver and the game agree.
+	var sols: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://tests/solutions.json"))
+	var replay_ok := true
+	var replay_bad := ""
+	var cases := []
+	for key in sols["levels"]:
+		cases.append([root.get_node("Game").level_data(int(key)), sols["levels"][key], "level " + key])
+	for b in sols["bosses"].size():
+		cases.append([root.get_node("Game").boss_data(b), sols["bosses"][b], "boss %d" % b])
+	for c in cases:
+		var rb := SortBoard.new()
+		rb.load_level(c[0])
+		rb.rust_spreads = false
+		for row in rb.hidden: # the solver sees through ash
+			row.fill(false)
+		var good := true
+		for mv in c[1]:
+			if rb.can_pour(int(mv[0]), int(mv[1])) != int(mv[2]):
+				good = false
+				break
+			rb.pour(int(mv[0]), int(mv[1]))
+		if not good or not rb.is_won():
+			replay_ok = false
+			replay_bad = c[2]
+			break
+	check(replay_ok, "%d solver solutions replay to a win on the game board %s" % [cases.size(), replay_bad])
 	var late: Dictionary = root.get_node("Game").level_data(n + 846)
 	check(late.has("lock") and late["lock"].all(func(x): return int(x) < Data.COLORS.size()), "repeated levels keep valid tag colours")
 	var big: Dictionary = root.get_node("Game").level_data(n + 57)

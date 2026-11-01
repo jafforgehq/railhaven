@@ -136,8 +136,9 @@ func show_home() -> void:
 	world.focus(_focus_uid())
 
 
-## Starts the next level. `pre` = pre-level boosters picked on the start popup (paid here).
-func play(pre: Array = []) -> void:
+## Starts the next level (or the region's landmark boss). `pre` = pre-level boosters picked on
+## the start popup (paid here).
+func play(pre: Array = [], boss := false) -> void:
 	if Game.lives <= 0:
 		Popups.out_of_lives(self)
 		return
@@ -153,7 +154,7 @@ func play(pre: Array = []) -> void:
 	puzzle.main = self
 	add_child(puzzle)
 	move_child(puzzle, toasts.get_index())
-	puzzle.start(Game.level, paid["apply"])
+	puzzle.start(Game.level, paid["apply"], boss)
 	var uid := _focus_uid(true)
 	world.heat_uid = uid
 	world.focus(uid)

@@ -9,6 +9,7 @@ var board := SortBoard.new()
 var view: PuzzleView
 var gauge: HeatGauge
 var level_n := 1
+var boss := false # landmark boss level: winning restores the region's landmark
 var heat := Data.HEAT_START
 var per_move := 1.0
 var continues := 0
@@ -24,6 +25,10 @@ var _booster_btns := {}
 var _top: PanelContainer
 var _bottom: PanelContainer
 var _tutorial_step := -1
+var charges := {"magnet": 0, "frost": 0} # earned in-level from cold snaps
+var _charge_btns := {}
+var _charge_row: HBoxContainer
+var _goal: GoalStrip
 
 
 func _ready() -> void:
@@ -65,6 +70,20 @@ func _build() -> void:
 	view.blocked.connect(func(text: String):
 		_banner.text = text
 		_banner.add_theme_color_override("font_color", UIKit.ORANGE))
+	view.target_picked.connect(_on_target)
+	_goal = GoalStrip.new()
+	_goal.view = view
+	add_child(_goal)
+	# Combo charges appear above the boosters when a cold snap earns them.
+	_charge_row = UIKit.hbox(10)
+	add_child(_charge_row)
+	for id in ["magnet", "frost"]:
+		var b := UIKit.button("", "GreenButton", "magnet" if id == "magnet" else "frostcharge", 64)
+		b.custom_minimum_size.x = 190
+		var cid: String = id
+		b.pressed.connect(func(): _use_charge(cid))
+		_charge_row.add_child(b)
+		_charge_btns[id] = b
 
 	_banner = UIKit.label("", "Value", HORIZONTAL_ALIGNMENT_CENTER)
 	_banner.add_theme_color_override("font_color", UIKit.ORANGE)
@@ -110,6 +129,12 @@ func _layout() -> void:
 	view.size = Vector2(size.x, size.y - top_h - band - bottom_h)
 	_banner.position = Vector2(20, top_h + band - 40)
 	_banner.size = Vector2(size.x - 40, 36)
+	if _goal.visible:
+		_goal.position = Vector2(16, view.position.y + 4)
+		_goal.size = Vector2(size.x - 32, 56)
+		view.position.y += 60
+		view.size.y -= 60
+	_place_charges()
 	main.world.set_band(top_h + 6, top_h + band)
 
 
@@ -119,9 +144,10 @@ func band_bottom() -> float:
 
 # ---------------------------------------------------------------- level flow
 
-func start(n: int, pre: Array = []) -> void:
+func start(n: int, pre: Array = [], is_boss := false) -> void:
 	level_n = n
-	var data := Game.level_data(n)
+	boss = is_boss
+	var data := Game.boss_data(Game.region_index) if boss else Game.level_data(n)
 	board = SortBoard.new()
 	board.load_level(data)
 	per_move = (Data.HEAT_MAX - Data.HEAT_START) / float(data.get("moves", 30))
@@ -139,9 +165,13 @@ func start(n: int, pre: Array = []) -> void:
 	finished = false
 	_chain = 0
 	_last_seal = -99.0
-	_title.text = "LEVEL %d" % n
-	_tag.text = "HEATWAVE · double parts" if data.get("hard", false) else Game.region_name()
+	_title.text = "BOSS LEVEL" if boss else "LEVEL %d" % n
+	_tag.text = Game.region()["landmark_name"] if boss else ("HEATWAVE · double parts" if data.get("hard", false) else Game.region_name())
 	_tag.add_theme_color_override("font_color", UIKit.RED if data.get("hard", false) else UIKit.MUTED)
+	view.boss = boss
+	_goal.board = board
+	_goal.visible = not board.goal.is_empty()
+	charges = {"magnet": 0, "frost": 0}
 	_banner.text = ""
 	view.locked = false
 	view.set_board(board)
@@ -170,6 +200,13 @@ func _process(delta: float) -> void:
 
 func _update() -> void:
 	gauge.heat = heat
+	for id in _charge_btns:
+		var b: Button = _charge_btns[id]
+		b.visible = charges[id] > 0 and not finished
+		b.get_meta("label").text = ("MAGNET x%d" if id == "magnet" else "FROST x%d") % charges[id]
+		b.theme_type_variation = "GoldButton" if view.target_mode == id else "GreenButton"
+	_goal.queue_redraw()
+	_place_charges.call_deferred()
 	for id in _booster_btns:
 		var n := Game.booster_count(id)
 		var price: int = Data.BOOSTERS[id]["price"]
@@ -184,11 +221,20 @@ func _on_poured(_from: int, _to: int, result: Dictionary) -> void:
 	if _tutorial_step >= 0:
 		Game.tutorial["first_pour"] = true
 		_tutorial_next(2)
-	if result["completed"]:
+	_settle(result)
+	_update()
+	_check_end()
+
+
+## Seals, thaws, hot canisters and rust from one pour (also used for magnet pours).
+func _settle(result: Dictionary) -> void:
+	for _s in result.get("sealed", []):
 		_on_seal()
-	for k in result.get("thawed", []):
-		_float("THAWED!", Color("bff4ff"))
+	if not result.get("thawed", []).is_empty():
+		_float("OPEN!", Color("bff4ff"))
 		Audio.play("upgrade")
+	if not result.get("rusted", []).is_empty():
+		_float("RUST SPREADS", UIKit.ORANGE)
 	if result.get("defused", 0) > 0:
 		heat = maxf(Game.start_heat() - 5.0, heat - Data.HOT_DEFUSE_COOL * result["defused"])
 		_float("HOT CANISTER SEALED  -%d°C" % int(Data.HOT_DEFUSE_COOL * result["defused"]), Color("7fe8ff"))
@@ -196,13 +242,15 @@ func _on_poured(_from: int, _to: int, result: Dictionary) -> void:
 		heat += Data.HOT_FLARE * result["flared"]
 		_float("FLARE!  +%d°C" % int(Data.HOT_FLARE * result["flared"]), UIKit.RED)
 		Audio.play("alarm", 0.1)
-	_update()
+
+
+func _check_end() -> void:
 	if board.is_won():
 		_win()
 	elif heat >= Data.HEAT_MAX:
 		_overheat()
 	elif board.is_stuck():
-		var help := Game.booster_count("undo") > 0 or Game.booster_count("tank") > 0
+		var help: bool = Game.booster_count("undo") > 0 or Game.booster_count("tank") > 0 or charges["magnet"] > 0 or charges["frost"] > 0
 		_banner.text = "No moves left! Use Undo or a Spare Tank" if help else "No moves left!"
 		if not help:
 			_overheat(true)
@@ -224,6 +272,13 @@ func _on_seal() -> void:
 		Game.stats["snaps"] += 1
 		_float("COLD SNAP x%d  -%d°C" % [_chain, int(cool)], Color("7fe8ff"))
 		Audio.play("upgrade")
+		# Combo pieces: a 2-chain earns a Magnet, a 3-chain a Frost Charge.
+		if _chain == Data.MAGNET_CHAIN:
+			charges["magnet"] += 1
+			_float.call_deferred("MAGNET CHARGE!", Color("ffd27a"))
+		elif _chain == Data.FROST_CHAIN:
+			charges["frost"] += 1
+			_float.call_deferred("FROST CHARGE!", Color("bff4ff"))
 	else:
 		_float("-%d°C" % int(cool), Color("9fe6ff"))
 
@@ -237,7 +292,7 @@ func _win() -> void:
 	await _cash_out(maxi(0, int(Data.HEAT_MAX - heat)) * Data.COOL_BONUS_PER_DEG)
 	main.world.frost_burst()
 	Audio.play("goal_complete")
-	var reward := Game.win_level(heat)
+	var reward := Game.win_boss(heat) if boss else Game.win_level(heat)
 	Popups.win(main, reward)
 
 
@@ -334,6 +389,50 @@ func _use_booster(id: String) -> void:
 	_update()
 
 
+## Charges sit at the top right of the train band, clear of the board and the banner.
+func _place_charges() -> void:
+	_charge_row.size = _charge_row.get_combined_minimum_size()
+	_charge_row.position = Vector2(size.x - _charge_row.size.x - 12, _top.get_combined_minimum_size().y + 10)
+
+
+func _use_charge(id: String) -> void:
+	if finished or charges[id] <= 0 or view.is_animating():
+		return
+	if id == "magnet":
+		view.target_mode = "" if view.target_mode == "magnet" else "magnet"
+		_banner.text = "Tap a tank: every matching canister flies into it" if view.target_mode != "" else ""
+		_banner.add_theme_color_override("font_color", UIKit.GOLD)
+	else:
+		charges["frost"] -= 1
+		heat = maxf(Game.start_heat() - 5.0, heat - Data.FROST_CHARGE_COOL)
+		board.frost_charge()
+		view.refresh_board()
+		view.burst_all()
+		_float("FROST CHARGE  -%d°C" % int(Data.FROST_CHARGE_COOL), Color("bff4ff"))
+		Audio.play("upgrade")
+	_update()
+
+
+func _on_target(i: int) -> void:
+	if view.target_mode != "magnet":
+		return
+	var results := board.magnet(i)
+	if results.is_empty():
+		_banner.text = "Pick a tank with a free canister on top"
+		Audio.play("error")
+		return
+	charges["magnet"] -= 1
+	view.target_mode = ""
+	view.refresh_board()
+	view.burst_at(i)
+	Audio.play("collect")
+	_float("MAGNET!", Color("ffd27a"))
+	for r in results:
+		_settle(r)
+	_update()
+	_check_end()
+
+
 func _float(text: String, col: Color) -> void:
 	var l := UIKit.label(text, "Header", HORIZONTAL_ALIGNMENT_CENTER)
 	l.add_theme_color_override("font_color", col)
@@ -402,3 +501,31 @@ class HeatGauge extends Control:
 		Icon.draw_kind(self, "temp", Rect2(Vector2(size.x - 86, size.y * 0.5 - 15), Vector2(30, 30)), col)
 		var font := UIKit.font_bold
 		draw_string(font, Vector2(size.x - 54, size.y * 0.5 + 10), "%d°" % int(round(heat)), HORIZONTAL_ALIGNMENT_LEFT, -1, 28, col if k > 0.6 else UIKit.TEXT)
+
+
+## Goal bar under the train: the colours to rescue (with drone parts) or to seal in order.
+class GoalStrip extends Control:
+	var view: PuzzleView
+	var board: SortBoard
+
+	func _draw() -> void:
+		if board == null or board.goal.is_empty():
+			return
+		draw_style_box(UIKit.box(Color(0.05, 0.06, 0.08, 0.85), Color(1, 1, 1, 0.1), 12, 2), Rect2(Vector2.ZERO, size))
+		var order: bool = board.goal["type"] == "order"
+		var font := UIKit.font_bold
+		var title := "SEAL IN ORDER" if order else "RESCUE DRONE PARTS"
+		draw_string(font, Vector2(14, size.y * 0.5 + 9), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 24, UIKit.GOLD)
+		var x := 14.0 + font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 24).x + 16.0
+		var want := board.next_in_order()
+		for c in board.goal["colors"]:
+			var r := Rect2(x, 8, 58, 40)
+			var done := board.color_sealed(int(c))
+			view.draw_canister_on(self, r, int(c), 0.45 if done else 1.0)
+			if order and int(c) == want:
+				draw_rect(r.grow(3), UIKit.GOLD, false, 2.0)
+			if done:
+				Icon.draw_kind(self, "check", Rect2(r.position + Vector2(30, 14), Vector2(30, 30)), UIKit.GREEN)
+			elif not order:
+				Icon.draw_kind(self, "drone", Rect2(r.position + Vector2(36, -4), Vector2(24, 24)), UIKit.GOLD)
+			x += 70.0

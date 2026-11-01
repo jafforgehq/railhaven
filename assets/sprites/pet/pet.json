@@ -1,0 +1,22 @@
+{
+ "canvas": [
+  96,
+  96
+ ],
+ "px_per_unit": 4.0,
+ "world_size": [
+  24.0,
+  24.0
+ ],
+ "feet": [
+  48.0,
+  92
+ ],
+ "facing": "left",
+ "frames": {
+  "walk": 6,
+  "sit": 2,
+  "jump": 1,
+  "sleep": 1
+ }
+}
