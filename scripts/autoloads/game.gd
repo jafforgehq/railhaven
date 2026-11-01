@@ -481,7 +481,7 @@ func to_dict() -> Dictionary:
 		"version": Data.SAVE_VERSION, "time": now(),
 		"region_index": region_index, "task_index": task_index, "region_done": region_done, "region_seen": region_seen,
 		"level": level, "parts": parts, "scrap": scrap, "lives": lives, "lives_at": lives_at,
-		"boosters": boosters, "carriages": carriages.map(func(c): return {"uid": c["uid"], "type": c["type"], "level": c["level"]}),
+		"boosters": boosters, "carriages": carriages.map(func(c): return {"uid": c["uid"], "type": c["type"], "level": c["level"], "livery": c.get("livery", "")}),
 		"next_uid": next_uid, "condenser_at": condenser_at, "meta": meta,
 		"stats": stats, "tutorial": tutorial, "intro_seen": intro_seen,
 	}
@@ -537,7 +537,7 @@ func from_dict(d: Dictionary) -> void:
 	for c in d.get("carriages", []):
 		if Data.CARRIAGES.has(str(c.get("type", ""))):
 			carriages.append({"uid": int(c["uid"]), "type": str(c["type"]), "level": clampi(int(c.get("level", 1)), 1, 10),
-				"timer": randf() * DRONE_CYCLE, "active": true, "repeat": true})
+				"livery": str(c.get("livery", "")), "timer": randf() * DRONE_CYCLE, "active": true, "repeat": true})
 	if carriages.is_empty():
 		next_uid = 1
 		for pair in Data.START_TRAIN:

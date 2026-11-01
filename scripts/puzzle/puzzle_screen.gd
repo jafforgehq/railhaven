@@ -293,6 +293,7 @@ func _win() -> void:
 	main.world.frost_burst()
 	Audio.play("goal_complete")
 	var reward := Game.win_boss(heat) if boss else Game.win_level(heat)
+	reward["card"] = Meta.roll_card(boss)
 	Popups.win(main, reward)
 
 

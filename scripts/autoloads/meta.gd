@@ -142,3 +142,155 @@ func claim_calendar() -> Dictionary:
 	Game.save_game()
 	changed.emit()
 	return reward
+
+
+# ---------------------------------------------------------------- Juno's story
+
+## The train's engineer narrates the journey in one-line bubbles on the home screen.
+const JUNO_NAME := "Juno"
+const JUNO_PORTRAIT := "res://assets/sprites/crew/engineer_a_portrait.png"
+const STORY := {
+	"intro": "I'm Juno, the engineer. This old loco is all that got out of the heat. Win us parts and we'll rebuild her, carriage by carriage.",
+	"built_cooling": "A Cooling Core! Every puzzle starts a little cooler from now on.",
+	"built_condenser": "The Condenser pulls water out of the night air. It earns scrap even while you're away.",
+	"built_quarters": "Real bunks at last. And look who snuck aboard with the timber: a fennec fox. I'm calling her Sandy.",
+	"built_greenhouse": "Green leaves on a train in a desert. Don't tell me that isn't hope.",
+	"built_recycler": "Every drop of water we use comes back clean. Out here that's worth more than gold.",
+	"built_workshop": "A proper workshop! Now I can fix things instead of hitting them.",
+	"built_dronebay": "Drones up. They'll scout the ruins ahead for anything worth salvaging.",
+	"built_cargo": "A cargo hold. Finally somewhere to put all this scrap that isn't my bunk.",
+	"built_lab": "The lab crew think the Mirror Array could cool a whole city. Let's find out.",
+	"built_medbay": "A med bay. Heatstroke has taken too many of us. Not any more.",
+	"region_1": "The Ash Coast. Somewhere under all that grey is a desalination plant. Get it running and the coast drinks again.",
+	"region_2": "The Glass Flats. Mind your eyes, the mirrors still track the sun.",
+	"region_3": "The Drowned City. The Seed Archive is down there, sealed and dry, if the old maps are right.",
+	"region_4": "The Green Highlands. Cool air, real soil. This could be home.",
+	"landmark": "We did it. Feel that breeze? That's the landmark running again.",
+	"boss": "This one's guarded by the worst heat yet. Keep your head cool.",
+}
+const UPGRADE_LINES := [
+	"Another upgrade. She's starting to look like a real train again.",
+	"Nice work. Sandy approves, I think. Hard to tell with foxes.",
+	"Every part you win ends up bolted to something. I keep count.",
+	"The crew sleeps better every time we fix something.",
+	"Heat's still out there, but it's not winning any more.",
+]
+
+
+## Juno's line for a story event, or "" when it has nothing new to say. One-time lines
+## (intro, first builds, regions) are remembered; upgrades get an occasional generic line.
+func story_line(key: String) -> String:
+	if key == "upgraded":
+		return UPGRADE_LINES.pick_random() if randf() < 0.5 else ""
+	if not STORY.has(key):
+		return ""
+	var seen: Dictionary = m().get("story", {})
+	if seen.has(key) and key not in ["landmark", "boss"]:
+		return ""
+	seen[key] = true
+	m()["story"] = seen
+	return STORY[key]
+
+
+# ---------------------------------------------------------------- liveries
+
+## Paint styles offered when a carriage is built (Homescapes-style three-way choice).
+const LIVERIES := [
+	{"name": "Desert Rust", "color": "c4572e"},
+	{"name": "Teal Line", "color": "3fd8c2"},
+	{"name": "Old Brass", "color": "e9b04a"},
+	{"name": "Ash White", "color": "e8e4dc"},
+	{"name": "Night Blue", "color": "3a6fd8"},
+	{"name": "Cactus", "color": "6fbf4a"},
+]
+
+
+## The three liveries offered for a carriage (stable per carriage).
+func livery_choices(uid: int) -> Array:
+	var pool := LIVERIES.duplicate()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = uid * 7919
+	for i in range(pool.size() - 1, 0, -1):
+		var j := rng.randi_range(0, i)
+		var t = pool[i]
+		pool[i] = pool[j]
+		pool[j] = t
+	return pool.slice(0, 3)
+
+
+func set_livery(uid: int, color: String) -> void:
+	var c := Game.carriage(uid)
+	if c.is_empty():
+		return
+	c["livery"] = color
+	Game.save_game()
+	changed.emit()
+
+
+# ---------------------------------------------------------------- postcard album
+
+## Six postcards per region. kind: "icon:<name>" or a texture path.
+const ALBUM := [
+	{"region": "Scorched Desert", "cards": [
+		["tower", "Climate Tower", "icon:tower"], ["juno", "Juno", "res://assets/sprites/crew/engineer_a_portrait.png"],
+		["loco", "The Old Loco", "res://assets/sprites/train/locomotive.png"], ["cooling", "Cooling Core", "res://assets/sprites/train/carriage_cooling_2.png"],
+		["sandy", "Sandy the Fox", "res://assets/sprites/pet/fox_sit_0.png"], ["dunes", "Dune Sunset", "icon:sun"]]},
+	{"region": "Ash Coast", "cards": [
+		["desal", "Desalination Works", "icon:desal"], ["grower", "The Grower", "res://assets/sprites/crew/grower_a_portrait.png"],
+		["drones", "Drone Bay", "res://assets/sprites/train/carriage_dronebay_3.png"], ["cargo", "Cargo Hold", "res://assets/sprites/train/carriage_cargo_2.png"],
+		["mechanic", "The Mechanic", "res://assets/sprites/crew/mechanic_a_portrait.png"], ["water", "Fresh Water", "icon:water"]]},
+	{"region": "Glass Flats", "cards": [
+		["mirror", "Mirror Array", "icon:mirror"], ["lab", "Research Lab", "res://assets/sprites/train/carriage_lab_4.png"],
+		["medbay", "Med Bay", "res://assets/sprites/train/carriage_medbay_2.png"], ["scientist", "The Scientist", "res://assets/sprites/crew/scientist_a_portrait.png"],
+		["pilot", "The Pilot", "res://assets/sprites/crew/pilot_a_portrait.png"], ["glare", "Glare", "icon:sun"]]},
+	{"region": "Drowned City", "cards": [
+		["archive", "Seed Archive", "icon:archive"], ["greenhouse", "Greenhouse", "res://assets/sprites/train/carriage_greenhouse_7.png"],
+		["medic", "The Medic", "res://assets/sprites/crew/medic_a_portrait.png"], ["workshop", "Workshop", "res://assets/sprites/train/carriage_workshop_7.png"],
+		["seeds", "Seeds", "icon:food"], ["nap", "Sandy Asleep", "res://assets/sprites/pet/fox_sleep.png"]]},
+	{"region": "Green Highlands", "cards": [
+		["haven", "Haven", "icon:haven"], ["quarters", "Quarters", "res://assets/sprites/train/carriage_quarters_9.png"],
+		["technician", "The Technician", "res://assets/sprites/crew/technician_a_portrait.png"], ["engineer", "The Engineer", "res://assets/sprites/crew/engineer_b_portrait.png"],
+		["recycler", "Water Recycler", "res://assets/sprites/train/carriage_recycler_10.png"], ["home", "Home", "icon:home"]]},
+]
+const CARD_CHANCE := 0.35
+const CARD_DUPLICATE_SCRAP := 25
+const SET_REWARD := {"scrap": 500, "pre_tank": 1, "pre_cool": 2}
+
+
+func cards() -> Array:
+	return m().get("cards", [])
+
+
+func has_card(id: String) -> bool:
+	return id in cards()
+
+
+func set_done(r: int) -> bool:
+	for c in ALBUM[r]["cards"]:
+		if not has_card(c[0]):
+			return false
+	return true
+
+
+## After a win: maybe a postcard from the current region's set. Returns {} or
+## {id, name, src, new, set_done} (a duplicate pays scrap instead).
+func roll_card(force := false) -> Dictionary:
+	if not force and randf() > CARD_CHANCE:
+		return {}
+	var r := mini(Game.region_index, ALBUM.size() - 1)
+	var set: Array = ALBUM[r]["cards"]
+	var missing := set.filter(func(c): return not has_card(c[0]))
+	var pick: Array = missing.pick_random() if not missing.is_empty() and randf() < 0.7 else set.pick_random()
+	var out := {"id": pick[0], "name": pick[1], "src": pick[2], "new": not has_card(pick[0]), "set_done": false}
+	if out["new"]:
+		var list := cards()
+		list.append(pick[0])
+		m()["cards"] = list
+		if set_done(r):
+			out["set_done"] = true
+			grant(SET_REWARD)
+	else:
+		Game.scrap += CARD_DUPLICATE_SCRAP
+	Game.save_game()
+	changed.emit()
+	return out

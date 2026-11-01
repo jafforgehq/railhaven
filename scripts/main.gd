@@ -17,6 +17,9 @@ var mode := "home"
 var _plates := {}
 var _modal_stack: Array[Control] = []
 var _home_root: Control
+var story: StoryBubble
+var rail: VBoxContainer # event / album buttons down the right edge (home)
+var _rail_btns := {}
 var _last_band_bottom := -1.0
 var _refresh_accum := 0.0
 
@@ -39,6 +42,12 @@ func _ready() -> void:
 	hud.main = self
 	_home_root.add_child(hud)
 	_build_home_sheet()
+	story = StoryBubble.new()
+	_home_root.add_child(story)
+	rail = UIKit.vbox(8)
+	rail.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_home_root.add_child(rail)
+	_rail_button("album", "card", "ALBUM", func(): MetaPopups.album(self))
 
 	toasts = UIKit.vbox(6)
 	toasts.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
@@ -57,6 +66,10 @@ func _ready() -> void:
 	Game.toast.connect(show_toast)
 	Game.carriage_built.connect(func(uid): _on_restored(uid, true))
 	Game.carriage_upgraded.connect(func(uid): _on_restored(uid, false))
+	Game.carriage_built.connect(func(uid): say("built_" + Game.carriage(uid).get("type", "")))
+	Game.carriage_upgraded.connect(func(_uid): say("upgraded"))
+	Game.region_started.connect(func(i): say("region_%d" % i))
+	Game.region_complete.connect(func(): say("landmark"))
 	Game.region_complete.connect(_on_region_complete)
 	Game.region_started.connect(func(_i): world.on_region_started(); _rebuild_plates(); _refresh())
 	world.tapped_carriage.connect(func(uid):
@@ -76,6 +89,7 @@ func _ready() -> void:
 	if OS.is_debug_build() and OS.get_cmdline_user_args().size() > 0:
 		add_child(preload("res://scripts/debug/shots.gd").new())
 	Audio.play_music("theme")
+	say.call_deferred("intro")
 	if not Game.intro_seen:
 		Popups.how_to_play.call_deferred(self)
 	elif Game.region_done and not Game.region_seen:
@@ -180,6 +194,28 @@ func _focus_uid(for_heat := false) -> int:
 func _layout() -> void:
 	if mode == "home" and home_host:
 		world.set_band(hud.band_top() + safe_top() * 0.0, home_host.get_global_rect().position.y)
+		var vp := get_viewport_rect().size
+		story.size = Vector2(vp.x - 32.0, 0)
+		story.size = story.get_combined_minimum_size().max(Vector2(vp.x - 32.0, 0))
+		story.position = Vector2(16, home_host.get_global_rect().position.y - story.size.y - 10.0)
+		rail.size = rail.get_combined_minimum_size()
+		rail.position = Vector2(vp.x - rail.size.x - 10.0, hud.band_top() + 10.0)
+
+
+## Juno says the story line for an event (if she has something new to say).
+func say(key: String) -> void:
+	story.say(Meta.story_line(key))
+
+
+func _rail_button(id: String, icon: String, text: String, on_press: Callable) -> void:
+	var b := UIKit.button("", "", icon, 76)
+	b.custom_minimum_size = Vector2(80, 76)
+	b.pressed.connect(on_press)
+	var l := UIKit.label(text, "Small", HORIZONTAL_ALIGNMENT_CENTER)
+	l.add_theme_constant_override("outline_size", 6)
+	l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+	rail.add_child(UIKit.vbox(0, [b, l]))
+	_rail_btns[id] = [b, l]
 
 
 func _process(delta: float) -> void:
@@ -209,6 +245,11 @@ func _on_changed() -> void:
 func _on_restored(uid: int, built: bool) -> void:
 	if built and Game.carriage(uid).get("type", "") == "condenser":
 		show_toast("Condenser online: it now earns scrap while you are away", "good")
+	if built:
+		# Pick a paint style once the new carriage has landed.
+		get_tree().create_timer(1.1).timeout.connect(func():
+			if mode == "home" and _modal_stack.is_empty():
+				MetaPopups.livery(self, uid))
 	_rebuild_plates()
 	world.celebrate(uid, built)
 	_refresh()

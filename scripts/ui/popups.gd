@@ -61,6 +61,14 @@ static func win(main: Node, r: Dictionary) -> void:
 	v.add_child(_reward_row([["scrap", "+%d" % r["scrap"]], ["undo", "+1"], ["tank", "+1"]] if r.get("boss", false) else [["parts", "+%d" % r["parts"]], ["scrap", "+%d" % r["scrap"]]]))
 	if r["bonus"] > 0:
 		v.add_child(UIKit.label("Includes +%d scrap cool bonus for finishing below 70°C" % r["bonus"], "Small", HORIZONTAL_ALIGNMENT_CENTER))
+	var card: Dictionary = r.get("card", {})
+	if not card.is_empty():
+		var cl := UIKit.label(("NEW POSTCARD: %s" if card["new"] else "Postcard %s again: +%d scrap" % ["%s", Meta.CARD_DUPLICATE_SCRAP]) % card["name"], "Accent", HORIZONTAL_ALIGNMENT_CENTER)
+		cl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var row := UIKit.hbox(10, [MetaPopups.card_view(card["src"], Vector2(96, 72)), cl])
+		v.add_child(row)
+		if card["set_done"]:
+			v.add_child(UIKit.label("SET COMPLETE! %s" % Meta.reward_text(Meta.SET_REWARD), "Accent", HORIZONTAL_ALIGNMENT_CENTER))
 	if Meta.streak() > 0:
 		var free: Array = Meta.streak_free().map(func(id): return Meta.PRE[id]["name"])
 		var sl := UIKit.label("WIN STREAK x%d · next level starts with %s" % [Meta.streak(), ", ".join(free)], "Accent", HORIZONTAL_ALIGNMENT_CENTER)
@@ -300,6 +308,12 @@ static func carriage_info(main: Node, uid: int) -> void:
 		text += " Puzzles now start at %d°C." % int(Game.start_heat())
 	v.add_child(UIKit.wrap_label(text, ""))
 	var ok := UIKit.button("OK", "TealButton", "", 58)
+	if c["type"] != "locomotive":
+		var paint := UIKit.button("REPAINT", "", "wrench", 58)
+		v.add_child(paint)
+		paint.pressed.connect(func():
+			main.close_modal()
+			MetaPopups.livery(main, uid))
 	v.add_child(ok)
 	var panel := _wrap(main, v)
 	ok.pressed.connect(func(): main.close_modal_of(panel))

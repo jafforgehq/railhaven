@@ -19,6 +19,7 @@ const RES_COLOR := {"scrap": Color("c9d1da"), "parts": Color("ffd27a"), "food": 
 var camera: Camera2D
 var views := {} # uid -> CarriageView
 var ghost: Node2D
+var pet: Pet
 var selected_uid := 0
 
 var _layers := {} # kind -> scenery node
@@ -63,6 +64,9 @@ func _ready() -> void:
 	add_child(_drones)
 	ghost = Ghost.new()
 	add_child(ghost)
+	pet = Pet.new()
+	pet.world = self
+	add_child(pet)
 	_build_fx()
 	rebuild()
 	_apply_region()
@@ -203,6 +207,7 @@ func rebuild() -> void:
 			v.level = c["level"]
 			_train.add_child(v)
 			views[c["uid"]] = v
+		v.livery = c.get("livery", "")
 		v.position.x = x
 		x += (LocoView.LW + 6.0) if c["type"] == "locomotive" else PITCH
 	ghost.position = Vector2(x, 0)
@@ -255,6 +260,9 @@ func celebrate(uid: int, built: bool) -> void:
 	if v == null:
 		return
 	v.level = Game.carriage(uid).get("level", v.level)
+	if built and v.type == "quarters":
+		pet.position.x = v.position.x + CarriageView.W * 0.5 # Sandy hops aboard with the bunks
+		pet.cheer()
 	if built:
 		v.position.y = -70.0
 		v.modulate.a = 0.0
@@ -282,6 +290,7 @@ func frost_burst() -> void:
 		return
 	v.flash = 0.8
 	v.frost = 1.0
+	pet.cheer()
 	for k in 14:
 		v.spark(Vector2(randf_range(10, CarriageView.W - 10), randf_range(-120, -30)), 6, Color("bff4ff"))
 
@@ -445,6 +454,10 @@ func handle_input(event: InputEvent) -> void:
 func _tap(wp: Vector2) -> void:
 	if wp.y < -170.0 or wp.y > 10.0:
 		tapped_empty.emit()
+		return
+	if pet.hit(wp):
+		pet.cheer()
+		Audio.play("ui_click")
 		return
 	if ghost.visible and wp.x >= ghost.position.x and wp.x <= ghost.position.x + CarriageView.W:
 		tapped_ghost.emit()

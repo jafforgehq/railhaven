@@ -120,3 +120,101 @@ static func calendar(main: Node) -> void:
 		Audio.play("collect")
 		main.close_modal_of(panel)
 		main.show_toast("Day %d supplies: %s" % [day + 1, Meta.reward_text(got)], "good"))
+
+
+# ---------------------------------------------------------------- liveries
+
+## Homescapes-style choice: three paint styles for a freshly built carriage.
+static func livery(main: Node, uid: int) -> void:
+	var c := Game.carriage(uid)
+	if c.is_empty() or c["type"] == "locomotive":
+		return
+	var v := Popups._modal_box(620)
+	v.add_child(Popups._title("PAINT THE %s" % Data.CARRIAGES[c["type"]]["name"].to_upper(), "Pick a livery. You can repaint it any time."))
+	var row := UIKit.hbox(10)
+	var panel: PanelContainer
+	for l in Meta.livery_choices(uid):
+		var b := Button.new()
+		b.custom_minimum_size = Vector2(0, 150)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var sw := ColorRect.new()
+		sw.color = Color(l["color"])
+		sw.custom_minimum_size = Vector2(70, 70)
+		sw.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var col := UIKit.vbox(6, [sw, UIKit.label(l["name"], "Small", HORIZONTAL_ALIGNMENT_CENTER)])
+		col.alignment = BoxContainer.ALIGNMENT_CENTER
+		col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		for ch in col.get_children():
+			ch.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		b.add_child(col)
+		var hex: String = l["color"]
+		b.pressed.connect(func():
+			Meta.set_livery(uid, hex)
+			main.world.rebuild()
+			Audio.play("upgrade")
+			main.close_modal_of(panel))
+		row.add_child(b)
+	v.add_child(row)
+	panel = Popups._wrap(main, v)
+
+
+# ---------------------------------------------------------------- postcard album
+
+## A postcard image: an icon or a texture on a framed card.
+static func card_view(src: String, size: Vector2, owned := true) -> Control:
+	var card := PanelContainer.new()
+	card.theme_type_variation = "Card"
+	card.custom_minimum_size = size
+	if not owned:
+		var q := UIKit.label("?", "Title", HORIZONTAL_ALIGNMENT_CENTER)
+		q.add_theme_color_override("font_color", UIKit.MUTED)
+		card.add_child(q)
+		return card
+	if src.begins_with("icon:"):
+		var ic := Icon.make(src.substr(5), int(size.y * 0.7))
+		ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		card.add_child(ic)
+	else:
+		var tr := TextureRect.new()
+		tr.texture = load(src) if ResourceLoader.exists(src) else null
+		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		tr.custom_minimum_size = size - Vector2(12, 12)
+		card.add_child(tr)
+	return card
+
+
+static func album(main: Node) -> void:
+	var v := Popups._modal_box(680)
+	var total := 0
+	for r in Meta.ALBUM:
+		total += r["cards"].size()
+	v.add_child(Popups._title("POSTCARD ALBUM", "%d / %d collected · wins sometimes drop a postcard" % [Meta.cards().size(), total]))
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, 760)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var list := UIKit.vbox(14)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(list)
+	for ri in Meta.ALBUM.size():
+		var r: Dictionary = Meta.ALBUM[ri]
+		var head := UIKit.label(r["region"].to_upper() + ("  · COMPLETE" if Meta.set_done(ri) else "  · set reward: " + Meta.reward_text(Meta.SET_REWARD)), "Value")
+		head.add_theme_color_override("font_color", UIKit.GREEN if Meta.set_done(ri) else UIKit.GOLD)
+		head.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		list.add_child(head)
+		var grid := GridContainer.new()
+		grid.columns = 3
+		grid.add_theme_constant_override("h_separation", 10)
+		grid.add_theme_constant_override("v_separation", 10)
+		for c in r["cards"]:
+			var owned := Meta.has_card(c[0])
+			var cell := UIKit.vbox(2, [card_view(c[2], Vector2(190, 130), owned), UIKit.label(c[1] if owned else "???", "Small", HORIZONTAL_ALIGNMENT_CENTER)])
+			grid.add_child(cell)
+		list.add_child(grid)
+	v.add_child(scroll)
+	var close := UIKit.button("CLOSE", "TealButton", "", 58)
+	v.add_child(close)
+	var panel := Popups._wrap(main, v)
+	close.pressed.connect(func(): main.close_modal_of(panel))

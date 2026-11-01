@@ -331,6 +331,28 @@ func _progress(g: Node) -> void:
 	g.lose_life()
 	check(meta.streak() == 0, "a loss resets the streak")
 
+	# Juno speaks one-time lines once; liveries, postcards.
+	check(meta.story_line("built_greenhouse") != "" and meta.story_line("built_greenhouse") == "", "one-time story lines play once")
+	var picks: Array = meta.livery_choices(7)
+	check(picks.size() == 3 and picks[0]["color"] != picks[1]["color"] and meta.livery_choices(7) == picks, "three stable livery choices per carriage")
+	meta.set_livery(g.carriages[1]["uid"], "c4572e")
+	g.meta["cards"] = []
+	g.region_index = 0
+	var first_card: Dictionary = meta.roll_card(true)
+	check(first_card["new"] and meta.has_card(first_card["id"]), "a postcard drop adds a new card")
+	g.meta["cards"] = meta.ALBUM[0]["cards"].map(func(c): return c[0])
+	var sc: int = g.scrap
+	var dupe: Dictionary = meta.roll_card(true)
+	check(not dupe["new"] and g.scrap == sc + meta.CARD_DUPLICATE_SCRAP, "a duplicate postcard pays scrap")
+	g.meta["cards"] = meta.ALBUM[0]["cards"].slice(1).map(func(c): return c[0])
+	var bonus_before: int = g.booster_count("pre_tank")
+	var got_card := {}
+	for k in 50:
+		got_card = meta.roll_card(true)
+		if got_card["set_done"]:
+			break
+	check(got_card["set_done"] and g.booster_count("pre_tank") == bonus_before + 1, "completing a set pays its reward")
+
 	# Save round-trip.
 	g.tutorial["blk_frozen"] = true
 	var d: Dictionary = JSON.parse_string(JSON.stringify(g.to_dict()))
@@ -339,6 +361,7 @@ func _progress(g: Node) -> void:
 	g.new_game()
 	g.from_dict(d)
 	check(g.tutorial.get("blk_frozen", false), "blocker intro flags survive a save")
+	check(g.carriages[1].get("livery", "") == "c4572e" and g.meta.get("cards", []).size() == 6, "liveries and postcards survive a save")
 	check(g.level == lv and g.region_index == reg and g.condenser_level() == 2 and typeof(g.carriages[0]["uid"]) == TYPE_INT, "save round-trip")
 	var old := {"version": 2, "res": {}, "carriages": []}
 	check(int(old["version"]) < Data.SAVE_VERSION, "idle saves (v1/v2) are older than the puzzle save version")

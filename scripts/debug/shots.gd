@@ -79,6 +79,19 @@ func _tour() -> void:
 	Game.parts = 4
 	Game.complete_task()
 	await _shot("07c_four_carriages", 1.2)
+	MetaPopups.livery(main, Game.first_of("quarters")["uid"])
+	await _shot("07d_livery", 0.5)
+	await _close_all(main)
+	Meta.set_livery(Game.first_of("quarters")["uid"], "c4572e")
+	main.world.rebuild()
+	main.world.focus(Game.first_of("quarters")["uid"])
+	main.story.say(Meta.STORY["built_quarters"])
+	await _shot("07e_story_fox", 1.5)
+	for k in 4:
+		Meta.roll_card(true)
+	MetaPopups.album(main)
+	await _shot("07f_album", 0.5)
+	await _close_all(main)
 	# A bigger level: two rows, some ash-covered canisters.
 	Game.level = 45
 	main.play()

@@ -20,6 +20,7 @@ var docked := 1 # drones visible on pads
 var t := 0.0
 var heat := 0.0 # 0..1 puzzle heat glowing through this carriage
 var frost := 0.0 # fades after a win
+var livery := "" # trim colour hex chosen when the carriage was built ("" = factory finish)
 var _crew := {} # sid -> {x, tx, state, timer, face}
 var _sparks: Array = [] # [pos, vel, life]
 
@@ -212,6 +213,8 @@ func part(name: String, c: Vector2, size: Vector2, rot := 0.0, mod := Color.WHIT
 
 func _draw() -> void:
 	draw_texture_rect(art("carriage_%s_%d" % [type, level]), ART_RECT, false)
+	if livery != "":
+		draw_texture_rect(art("livery_trim"), ART_RECT, false, Color(livery))
 	_draw_lights()
 	match type:
 		"quarters": _fx_quarters()
