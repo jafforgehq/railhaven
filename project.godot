@@ -26,6 +26,7 @@ config/quit_on_go_back=false
 Game="*res://scripts/autoloads/game.gd"
 Audio="*res://scripts/autoloads/audio.gd"
 Ads="*res://scripts/autoloads/ads.gd"
+Meta="*res://scripts/autoloads/meta.gd"
 
 [display]
 

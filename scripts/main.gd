@@ -136,9 +136,14 @@ func show_home() -> void:
 	world.focus(_focus_uid())
 
 
-func play() -> void:
+## Starts the next level. `pre` = pre-level boosters picked on the start popup (paid here).
+func play(pre: Array = []) -> void:
 	if Game.lives <= 0:
 		Popups.out_of_lives(self)
+		return
+	var paid := Meta.take_pre(pre)
+	if not paid["ok"]:
+		show_toast("Not enough scrap for those boosters", "warn")
 		return
 	mode = "puzzle"
 	coach.point(Vector2.ZERO, "")
@@ -148,7 +153,7 @@ func play() -> void:
 	puzzle.main = self
 	add_child(puzzle)
 	move_child(puzzle, toasts.get_index())
-	puzzle.start(Game.level)
+	puzzle.start(Game.level, paid["apply"])
 	var uid := _focus_uid(true)
 	world.heat_uid = uid
 	world.focus(uid)

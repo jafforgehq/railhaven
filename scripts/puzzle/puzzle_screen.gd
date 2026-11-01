@@ -119,13 +119,21 @@ func band_bottom() -> float:
 
 # ---------------------------------------------------------------- level flow
 
-func start(n: int) -> void:
+func start(n: int, pre: Array = []) -> void:
 	level_n = n
 	var data := Game.level_data(n)
 	board = SortBoard.new()
 	board.load_level(data)
 	per_move = (Data.HEAT_MAX - Data.HEAT_START) / float(data.get("moves", 30))
 	heat = Game.start_heat()
+	# Pre-level boosters (picked or free from the win streak).
+	if "pre_cool" in pre:
+		heat -= Meta.PRE_COOL
+	if "pre_tank" in pre:
+		board.add_tank()
+	if "pre_ash" in pre:
+		for row in board.hidden:
+			row.fill(false)
 	continues = 0
 	moves_made = 0
 	finished = false
@@ -141,6 +149,8 @@ func start(n: int) -> void:
 	_tutorial_step = 0 if n == 1 and not Game.tutorial["first_pour"] else -1
 	_tutorial_next(0)
 	_layout.call_deferred()
+	if not pre.is_empty():
+		_float.call_deferred(", ".join(pre.map(func(id): return Meta.PRE[id]["name"])), Color("ffd27a"))
 	# First time a blocker shows up, explain it (one per level).
 	for kind in Data.BLOCKERS:
 		var has: bool = data.has(kind) and (kind != "hidden" or data[kind].any(func(r): return r.has(true)))
@@ -223,11 +233,43 @@ func _win() -> void:
 	view.locked = true
 	_update()
 	main.coach.point(Vector2.ZERO, "")
-	await get_tree().create_timer(0.9).timeout
+	await get_tree().create_timer(0.6).timeout
+	await _cash_out(maxi(0, int(Data.HEAT_MAX - heat)) * Data.COOL_BONUS_PER_DEG)
 	main.world.frost_burst()
 	Audio.play("goal_complete")
 	var reward := Game.win_level(heat)
 	Popups.win(main, reward)
+
+
+## Sugar-Crush-style finale: the unused heat headroom bursts out of the tanks as frost that
+## flies up to the train and counts into the cool bonus.
+func _cash_out(bonus: int) -> void:
+	if bonus <= 0:
+		return
+	var counter := UIKit.label("COOL BONUS +0", "Header", HORIZONTAL_ALIGNMENT_CENTER)
+	counter.add_theme_color_override("font_color", Color("9fe6ff"))
+	counter.add_theme_constant_override("outline_size", 8)
+	counter.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+	counter.size = Vector2(size.x, 50)
+	counter.position = Vector2(0, view.position.y + 8)
+	add_child(counter)
+	var target := Vector2(size.x * 0.5, view.position.y - 60)
+	var n := clampi(bonus / 2, 6, 18)
+	for k in n:
+		var flake := Icon.make("snowflake", 38, Color("bff4ff"))
+		var r := view.tank_rect(k % board.tanks.size())
+		flake.position = view.position + r.get_center() - Vector2(19, 19)
+		flake.pivot_offset = Vector2(19, 19)
+		add_child(flake)
+		var tw := flake.create_tween().set_parallel()
+		tw.tween_property(flake, "position", target - Vector2(19, 19) + Vector2(randf_range(-80, 80), 0), 0.55).set_delay(k * 0.05).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tw.tween_property(flake, "rotation", randf_range(-3.0, 3.0), 0.55).set_delay(k * 0.05)
+		tw.chain().tween_callback(func():
+			counter.text = "COOL BONUS +%d" % int(bonus * float(k + 1) / n)
+			Audio.play("collect", 0.02)
+			flake.queue_free())
+	await get_tree().create_timer(0.55 + n * 0.05 + 0.5).timeout
+	counter.queue_free()
 
 
 func _overheat(stuck := false) -> void:

@@ -41,8 +41,6 @@ const COOL_BONUS_PER_DEG := 1 # extra scrap per °C left under the limit
 const REFILL_COST := 400
 const CONTINUE_COST := [250, 500, 800]
 const START_SCRAP := 300
-const DAILY_GIFT := {"scrap": 150}
-const DAILY_GIFT_COOLDOWN := 20.0 * 3600.0
 
 const BOOSTERS := {
 	"undo": {"name": "Undo", "icon": "undo", "price": 120, "desc": "Take back your last pour."},

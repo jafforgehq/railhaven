@@ -57,12 +57,16 @@ func _ready() -> void:
 		else:
 			main.show_toast("Couple the Condenser to earn scrap while you are away", "info"))
 	_shop.pressed.connect(func(): Popups.shop(main))
-	_daily.pressed.connect(func(): Popups.daily(main))
+	_daily.pressed.connect(func(): MetaPopups.calendar(main))
 	add_child(UIKit.hbox(8, [_cond, _shop, _daily]))
 
 	_play = UIKit.button("LEVEL 1", "TealButton", "play", 84)
 	(_play.get_meta("label") as Label).add_theme_font_size_override("font_size", 36)
-	_play.pressed.connect(func(): main.play())
+	_play.pressed.connect(func():
+		if Game.lives <= 0:
+			Popups.out_of_lives(main)
+		else:
+			MetaPopups.pre_level(main))
 	main.register_target("play", _play)
 	_play_sub = UIKit.label("", "Small", HORIZONTAL_ALIGNMENT_CENTER)
 	add_child(UIKit.vbox(2, [_play, _play_sub]))
@@ -107,8 +111,8 @@ func refresh() -> void:
 		_cond.get_meta("label").text = "LOCKED"
 	_cond.modulate.a = 1.0 if Game.has_condenser() else 0.55
 	_cond.theme_type_variation = "GreenButton" if Game.condenser_ready() else ""
-	_daily.get_meta("label").text = "DAILY" if Game.daily_ready() else UIKit.fmt_time(Game.daily_in())
-	_daily.theme_type_variation = "GreenButton" if Game.daily_ready() else ""
+	_daily.get_meta("label").text = "DAILY" if Meta.cal_ready() else UIKit.fmt_time(Meta.cal_in())
+	_daily.theme_type_variation = "GreenButton" if Meta.cal_ready() else ""
 	var hard := Game.is_hard(Game.level)
 	_play.get_meta("label").text = "LEVEL %d" % Game.level
 	_play.theme_type_variation = "RedButton" if hard else "TealButton"
@@ -118,6 +122,9 @@ func refresh() -> void:
 	elif hard:
 		_play_sub.text = "HEATWAVE LEVEL · double parts"
 		_play_sub.add_theme_color_override("font_color", UIKit.RED)
+	elif Meta.streak() > 0:
+		_play_sub.text = "Lives %d/%d · win streak %d" % [Game.lives, Data.MAX_LIVES, Meta.streak()]
+		_play_sub.add_theme_color_override("font_color", UIKit.ORANGE)
 	else:
 		_play_sub.text = "Lives %d/%d" % [Game.lives, Data.MAX_LIVES]
 		_play_sub.add_theme_color_override("font_color", UIKit.MUTED)

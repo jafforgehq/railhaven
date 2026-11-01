@@ -58,6 +58,12 @@ static func win(main: Node, r: Dictionary) -> void:
 	v.add_child(_reward_row([["parts", "+%d" % r["parts"]], ["scrap", "+%d" % r["scrap"]]]))
 	if r["bonus"] > 0:
 		v.add_child(UIKit.label("Includes +%d scrap cool bonus for finishing below 70°C" % r["bonus"], "Small", HORIZONTAL_ALIGNMENT_CENTER))
+	if Meta.streak() > 0:
+		var free: Array = Meta.streak_free().map(func(id): return Meta.PRE[id]["name"])
+		var sl := UIKit.label("WIN STREAK x%d · next level starts with %s" % [Meta.streak(), ", ".join(free)], "Accent", HORIZONTAL_ALIGNMENT_CENTER)
+		sl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		sl.add_theme_color_override("font_color", UIKit.ORANGE)
+		v.add_child(UIKit.hbox(6, [Icon.make("streak", 30, UIKit.ORANGE), sl]))
 	var t := Game.current_task()
 	if not t.is_empty():
 		# Progress toward the next piece of the train, so every win visibly moves it forward.
@@ -242,27 +248,6 @@ static func condenser(main: Node) -> void:
 			Audio.play("upgrade")
 			refresh.call())
 	close.pressed.connect(func(): main.close_modal_of(panel))
-
-
-static func daily(main: Node) -> void:
-	var v := _modal_box(540)
-	v.add_child(_big_icon("gift", 100))
-	if Game.daily_ready():
-		v.add_child(_title("DAILY SUPPLY DROP", "A crate fell from a passing drone"))
-		var open := UIKit.button("OPEN", "TealButton", "gift", 66)
-		v.add_child(open)
-		var panel := _wrap(main, v)
-		open.pressed.connect(func():
-			var got := Game.claim_daily()
-			Audio.play("collect")
-			main.close_modal_of(panel)
-			main.show_toast("Supply drop: +%d scrap and a %s" % [got["scrap"], Data.BOOSTERS[got["booster"]]["name"]], "good"))
-	else:
-		v.add_child(_title("NEXT DROP", "in %s" % UIKit.fmt_time(Game.daily_in())))
-		var close := UIKit.button("OK", "TealButton", "", 58)
-		v.add_child(close)
-		var panel := _wrap(main, v)
-		close.pressed.connect(func(): main.close_modal_of(panel))
 
 
 # ---------------------------------------------------------------- region

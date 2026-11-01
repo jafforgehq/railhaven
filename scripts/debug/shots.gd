@@ -43,6 +43,14 @@ func _tour() -> void:
 	main._rebuild_plates()
 	main.show_home()
 	await _shot("01_home")
+	Game.stats["streak"] = 2
+	MetaPopups.pre_level(main)
+	await _shot("01b_prelevel")
+	await _close_all(main)
+	Game.stats["streak"] = 0
+	MetaPopups.calendar(main)
+	await _shot("01c_calendar")
+	await _close_all(main)
 	main.play()
 	await _shot("02_level1")
 	# Tutorial: lift the first tank.
@@ -55,7 +63,8 @@ func _tour() -> void:
 		main.puzzle.view._tap(m[0])
 		main.puzzle.view._tap(m[1])
 		await get_tree().create_timer(0.45).timeout
-	await _shot("05_win", 1.8)
+	await _shot("05a_cashout", 1.2)
+	await _shot("05_win", 1.4)
 	await _close_all(main)
 	main.show_home()
 	await _shot("06_home_restore")

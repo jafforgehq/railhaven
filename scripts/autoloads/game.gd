@@ -27,7 +27,7 @@ var boosters: Dictionary = {}
 var carriages: Array = [] # {uid, type, level, timer, active, repeat}
 var next_uid := 1
 var condenser_at := 0.0 # unix time of the last Condenser claim
-var daily_at := 0.0 # unix time of the last daily gift
+var meta: Dictionary = {} # retention systems' state, owned by the Meta autoload
 var stats := {"wins": 0, "losses": 0, "snaps": 0, "streak": 0, "best_streak": 0}
 var tutorial := {"first_pour": false, "first_restore": false}
 var intro_seen := false
@@ -84,7 +84,7 @@ func new_game() -> void:
 	for pair in Data.START_TRAIN:
 		_add_carriage(pair[0], pair[1])
 	condenser_at = now()
-	daily_at = 0.0
+	meta = {}
 	stats = {"wins": 0, "losses": 0, "snaps": 0, "streak": 0, "best_streak": 0}
 	tutorial = {"first_pour": false, "first_restore": false}
 	intro_seen = false
@@ -445,28 +445,6 @@ func upgrade_condenser() -> bool:
 	return true
 
 
-# ---------------------------------------------------------------- daily gift
-
-func daily_ready() -> bool:
-	return now() - daily_at >= Data.DAILY_GIFT_COOLDOWN
-
-
-func daily_in() -> float:
-	return maxf(0.0, Data.DAILY_GIFT_COOLDOWN - (now() - daily_at))
-
-
-func claim_daily() -> Dictionary:
-	if not daily_ready():
-		return {}
-	daily_at = now()
-	var b: String = Data.BOOSTER_ORDER.pick_random()
-	boosters[b] = booster_count(b) + 1
-	scrap += int(Data.DAILY_GIFT["scrap"])
-	save_game()
-	changed.emit()
-	return {"scrap": int(Data.DAILY_GIFT["scrap"]), "booster": b}
-
-
 # ---------------------------------------------------------------- persistence
 
 func to_dict() -> Dictionary:
@@ -475,7 +453,7 @@ func to_dict() -> Dictionary:
 		"region_index": region_index, "task_index": task_index, "region_done": region_done, "region_seen": region_seen,
 		"level": level, "parts": parts, "scrap": scrap, "lives": lives, "lives_at": lives_at,
 		"boosters": boosters, "carriages": carriages.map(func(c): return {"uid": c["uid"], "type": c["type"], "level": c["level"]}),
-		"next_uid": next_uid, "condenser_at": condenser_at, "daily_at": daily_at,
+		"next_uid": next_uid, "condenser_at": condenser_at, "meta": meta,
 		"stats": stats, "tutorial": tutorial, "intro_seen": intro_seen,
 	}
 
@@ -523,8 +501,9 @@ func from_dict(d: Dictionary) -> void:
 	lives = clampi(int(d.get("lives", Data.MAX_LIVES)), 0, Data.MAX_LIVES)
 	lives_at = float(d.get("lives_at", now()))
 	boosters = {}
-	for k in Data.BOOSTER_ORDER:
-		boosters[k] = maxi(0, int(d.get("boosters", {}).get(k, 0)))
+	var saved: Dictionary = d.get("boosters", {})
+	for k in saved: # in-level and pre-level boosters
+		boosters[k] = maxi(0, int(saved[k]))
 	carriages = []
 	for c in d.get("carriages", []):
 		if Data.CARRIAGES.has(str(c.get("type", ""))):
@@ -539,7 +518,7 @@ func from_dict(d: Dictionary) -> void:
 		max_uid = maxi(max_uid, c["uid"])
 	next_uid = maxi(int(d.get("next_uid", 1)), max_uid + 1)
 	condenser_at = float(d.get("condenser_at", now()))
-	daily_at = float(d.get("daily_at", 0.0))
+	meta = d.get("meta", {}) if typeof(d.get("meta")) == TYPE_DICTIONARY else {}
 	var st: Dictionary = d.get("stats", {})
 	for k in stats:
 		stats[k] = int(st.get(k, 0))

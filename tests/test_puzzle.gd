@@ -213,8 +213,28 @@ func _progress(g: Node) -> void:
 	var u: int = g.booster_count("undo")
 	check(g.buy_booster("undo") and g.booster_count("undo") == u + 1, "buy a booster")
 	check(g.use_booster("undo") and g.booster_count("undo") == u, "use a booster")
-	g.daily_at = 0.0
-	check(not g.claim_daily().is_empty() and not g.daily_ready(), "daily drop once per cooldown")
+	var meta: Node = root.get_node("Meta")
+	check(meta.cal_ready() and meta.cal_day() == 0, "calendar starts at day 1")
+	var s1: int = g.scrap
+	check(not meta.claim_calendar().is_empty() and not meta.cal_ready() and meta.cal_day() == 1 and g.scrap == s1 + 100, "calendar pays once per day and advances")
+	check(meta.claim_calendar().is_empty(), "no second claim on the same day")
+	g.meta["cal_date"] = "2000-01-01"
+	g.meta["cal_day"] = 6
+	var day7: Dictionary = meta.claim_calendar()
+	check(day7.has("pre_cool") and meta.cal_day() == 0, "day 7 pays the big crate and the week restarts")
+
+	# Win streak gives free pre-level boosters; picked ones use stock first, then scrap.
+	g.stats["streak"] = 0
+	check(meta.streak_free().is_empty(), "no streak, no freebies")
+	g.stats["streak"] = 2
+	g.boosters["pre_ash"] = 0
+	g.scrap = 1000
+	var paid: Dictionary = meta.take_pre(["pre_ash", "pre_cool"])
+	check(paid["ok"] and paid["apply"].size() == 3 and g.scrap == 1000 - int(meta.PRE["pre_ash"]["price"]), "streak 2: cool start and extra tank free, ash sweep bought")
+	g.scrap = 0
+	check(not meta.take_pre(["pre_ash"])["ok"], "cannot buy pre-level boosters without scrap")
+	g.lose_life()
+	check(meta.streak() == 0, "a loss resets the streak")
 
 	# Save round-trip.
 	g.tutorial["blk_frozen"] = true
