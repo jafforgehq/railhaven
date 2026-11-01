@@ -100,7 +100,9 @@ func _levels() -> void:
 func _progress(g: Node) -> void:
 	g.new_game()
 	check(g.lives == Data.MAX_LIVES and g.scrap == Data.START_SCRAP and g.level == 1, "new game")
-	check(g.count_type("condenser") == 1 and g.count_type("cooling") == 1, "train starts with Cooling Core and Condenser")
+	check(g.carriages.size() == 1 and g.count_type("locomotive") == 1, "train starts as the locomotive alone")
+	check(not g.has_condenser() and not g.condenser_ready() and g.condenser_upgrade_block() != "", "no Condenser earnings before it is coupled")
+	check(g.next_build() == "cooling" and g.task_progress() == 0.0, "first task assembles the Cooling Core")
 
 	# Winning pays parts and scrap, heatwave levels pay double parts.
 	var r: Dictionary = g.win_level(50.0)
@@ -109,18 +111,27 @@ func _progress(g: Node) -> void:
 	r = g.win_level(69.0)
 	check(r["hard"] and r["parts"] == 2, "heatwave level pays 2 parts")
 
-	# Tasks restore the train in order; the landmark ends the region.
+	# Tasks grow the train in order; the landmark ends the region.
 	g.parts = 0
 	check(g.task_block_reason().begins_with("Need"), "task needs parts")
 	g.parts = 1
-	check(g.complete_task() and g.level_of("quarters") == 2, "first task upgrades the quarters")
+	check(g.task_progress() == 1.0 and g.complete_task() and g.carriages.size() == 2 and g.level_of("cooling") == 1, "first task couples the Cooling Core")
+	g.parts = 1
+	check(g.next_build() == "condenser" and is_equal_approx(g.task_progress(), 0.5), "half the parts for the Condenser")
 	g.parts = 100
-	var n0: int = g.carriages.size()
 	g.complete_task()
-	check(g.carriages.size() == n0 + 1 and g.count_type("greenhouse") == 1, "build task adds a carriage")
+	check(g.has_condenser() and not g.condenser_ready(), "a new Condenser starts empty")
+	var sizes := []
 	while not g.region_done:
 		g.complete_task()
-	check(g.region_done and g.landmark_visibility() == 1.0, "landmark task restores the region")
+		sizes.append(g.carriages.size())
+	check(g.region_done and g.landmark_visibility() == 1.0 and g.next_build() == "", "landmark task restores the region")
+	check(g.carriages.size() == 7, "region 1 grows the train to 7 carriages (%d)" % g.carriages.size())
+	var total := 0
+	for reg in Data.REGIONS:
+		for t in reg["tasks"]:
+			total += int(t["cost"])
+	check(total < 0.85 * g.level_count(), "the whole journey fits inside the authored levels (%d parts)" % total)
 	check(g.advance_region() and g.region_index == 1 and g.task_index == 0, "depart for region 2")
 	check(g.start_heat() < Data.HEAT_START, "an upgraded Cooling Core starts puzzles cooler")
 

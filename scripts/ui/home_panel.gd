@@ -51,7 +51,11 @@ func _ready() -> void:
 	_daily = UIKit.button("DAILY", "", "gift", 58)
 	for b in [_cond, _shop, _daily]:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_cond.pressed.connect(func(): Popups.condenser(main))
+	_cond.pressed.connect(func():
+		if Game.has_condenser():
+			Popups.condenser(main)
+		else:
+			main.show_toast("Couple the Condenser to earn scrap while you are away", "info"))
 	_shop.pressed.connect(func(): Popups.shop(main))
 	_daily.pressed.connect(func(): Popups.daily(main))
 	add_child(UIKit.hbox(8, [_cond, _shop, _daily]))
@@ -99,6 +103,9 @@ func refresh() -> void:
 		_restore.get_meta("label").text = "RESTORE"
 	var amount := Game.condenser_amount()
 	_cond.get_meta("label").text = ("FULL %d" % amount) if Game.condenser_full() else ("+%d" % amount if Game.condenser_ready() else "CONDENSER")
+	if not Game.has_condenser():
+		_cond.get_meta("label").text = "LOCKED"
+	_cond.modulate.a = 1.0 if Game.has_condenser() else 0.55
 	_cond.theme_type_variation = "GreenButton" if Game.condenser_ready() else ""
 	_daily.get_meta("label").text = "DAILY" if Game.daily_ready() else UIKit.fmt_time(Game.daily_in())
 	_daily.theme_type_variation = "GreenButton" if Game.daily_ready() else ""

@@ -206,7 +206,12 @@ func rebuild() -> void:
 		v.position.x = x
 		x += (LocoView.LW + 6.0) if c["type"] == "locomotive" else PITCH
 	ghost.position = Vector2(x, 0)
-	ghost.visible = false # carriages arrive through restoration tasks, not a build slot
+	# The next carriage waits at the end of the train as an outline that fills with parts.
+	var next := Game.next_build()
+	ghost.visible = next != ""
+	if next != ghost.kind:
+		ghost.kind = next
+		ghost.shown = 0.0
 	_train.ends = views.values().map(func(v): return v.position.x)
 	_train.queue_redraw()
 	var length := train_end()
@@ -317,6 +322,9 @@ func _process(delta: float) -> void:
 		s.storm = 0.0
 	for uid in views:
 		views[uid].heat = Game.heat_visual if uid == heat_uid else 0.0
+	if ghost.visible != (Game.next_build() != ""):
+		rebuild()
+	ghost.target = Game.task_progress()
 	var sky: Node2D = _layers["landmark"]
 	sky.tower = snappedf(Game.landmark_visibility(), 0.05)
 	sky.restored = Game.region_done
@@ -465,16 +473,26 @@ class Coupler extends Node2D:
 class Ghost extends Node2D:
 	var selected := false
 	var t := 0.0
+	var kind := "" # carriage type being assembled
+	var target := 0.0 # parts collected toward it, 0..1
+	var shown := 0.0 # animated fill, rises after each win
 
 	func _process(delta: float) -> void:
 		t += delta
+		shown = move_toward(shown, target, delta * 0.6)
 		queue_redraw()
 
 	func _draw() -> void:
-		var a := 0.55 + 0.25 * sin(t * 3.0) + (0.2 if selected else 0.0)
-		var col := Color(0.3, 0.95, 0.85, a)
+		var full := shown >= 0.999
+		var a := 0.55 + 0.25 * sin(t * (6.0 if full else 3.0)) + (0.2 if selected else 0.0)
+		var col := Color(1.0, 0.82, 0.4, a) if full else Color(0.3, 0.95, 0.85, a)
 		var w := CarriageView.W
-		draw_rect(Rect2(0, -136, w, 116), Color(0.3, 0.95, 0.85, 0.07))
+		draw_rect(Rect2(0, -136, w, 116), Color(col.r, col.g, col.b, 0.07))
+		if shown > 0.0:
+			# Parts fill the frame from the floor up.
+			var h := 116.0 * shown
+			draw_rect(Rect2(1, -20 - h, w - 2, h), Color(col.r, col.g, col.b, 0.16 + (0.1 * sin(t * 6.0) if full else 0.0)))
+			draw_rect(Rect2(1, -21 - h, w - 2, 2), Color(col.r, col.g, col.b, 0.8))
 		var x := 0.0
 		while x < w:
 			draw_rect(Rect2(x, -136, minf(6, w - x), 1), col)

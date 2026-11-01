@@ -62,6 +62,12 @@ func _ready() -> void:
 	world.tapped_carriage.connect(func(uid):
 		if mode == "home" and _modal_stack.is_empty():
 			Popups.carriage_info(self, uid))
+	world.tapped_ghost.connect(func():
+		if mode == "home" and _modal_stack.is_empty():
+			if Game.task_block_reason() == "":
+				home._on_restore()
+			else:
+				show_toast("%s: win levels to earn parts (%d/%d)" % [Game.current_task()["text"], Game.parts, int(Game.current_task()["cost"])], "info"))
 	world.float_text.connect(_float_text)
 	get_viewport().size_changed.connect(_layout)
 
@@ -143,14 +149,17 @@ func play() -> void:
 	add_child(puzzle)
 	move_child(puzzle, toasts.get_index())
 	puzzle.start(Game.level)
-	var uid := _focus_uid()
+	var uid := _focus_uid(true)
 	world.heat_uid = uid
 	world.focus(uid)
 	Audio.play("ui_open")
 
 
-## The carriage the next task is about (or a random carriage to cool).
-func _focus_uid() -> int:
+## The carriage the next task is about (or a random carriage to cool). At home a carriage
+## still being assembled is the ghost (-1); a puzzle always heats a real carriage.
+func _focus_uid(for_heat := false) -> int:
+	if not for_heat and Game.next_build() != "":
+		return -1
 	var t := Game.current_task()
 	if not t.is_empty() and t.has("type"):
 		var c := Game.first_of(t["type"])
@@ -192,6 +201,8 @@ func _on_changed() -> void:
 
 
 func _on_restored(uid: int, built: bool) -> void:
+	if built and Game.carriage(uid).get("type", "") == "condenser":
+		show_toast("Condenser online: it now earns scrap while you are away", "good")
 	_rebuild_plates()
 	world.celebrate(uid, built)
 	_refresh()
@@ -211,10 +222,11 @@ func _update_coach() -> void:
 		return
 	var text := ""
 	var pos := Vector2(-1, -1)
-	if not Game.region_done and Game.task_block_reason() == "" and Game.task_index < 3 and Game.region_index == 0:
+	var can_restore := not Game.region_done and Game.task_block_reason() == ""
+	if can_restore and Game.task_index < 4 and Game.region_index == 0:
 		pos = _target_pos("restore")
-		text = "You have enough parts. Restore the train!"
-	elif Game.level <= 3 and Game.lives > 0:
+		text = "You have enough parts. Grow the train!"
+	elif Game.level <= 3 and Game.lives > 0 and not can_restore:
 		pos = _target_pos("play")
 		text = "Play a level to cool the train and earn parts"
 	if pos.x < 0:
@@ -241,16 +253,20 @@ func _rebuild_plates() -> void:
 	for p in _plates.values():
 		p.queue_free()
 	_plates.clear()
-	for c in Game.carriages:
+	var uids: Array = Game.carriages.map(func(c): return c["uid"])
+	if Game.next_build() != "":
+		uids.append(-1) # the ghost of the carriage being assembled
+	for uid in uids:
+		var type: String = Game.next_build() if uid == -1 else Game.carriage(uid)["type"]
 		var plate := UIKit.panel("Chip")
 		plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var icon := Icon.make(Data.CARRIAGES[c["type"]]["icon"], 20, UIKit.TEAL)
+		var icon := Icon.make(Data.CARRIAGES[type]["icon"], 20, UIKit.TEAL)
 		var name := UIKit.label("", "Small")
 		name.add_theme_color_override("font_color", UIKit.TEXT)
 		plate.add_child(UIKit.hbox(6, [icon, name]))
 		plate.set_meta("name", name)
 		overlay.add_child(plate)
-		_plates[c["uid"]] = plate
+		_plates[uid] = plate
 
 
 func _update_plates() -> void:
@@ -258,13 +274,24 @@ func _update_plates() -> void:
 	for uid in _plates:
 		var plate: PanelContainer = _plates[uid]
 		var c := Game.carriage(uid)
-		if c.is_empty():
+		if uid == -1:
+			c = {"type": Game.next_build(), "level": 0}
+		if c.is_empty() or c["type"] == "":
+			plate.visible = false
 			continue
 		var center := world.carriage_center(uid)
 		var sp: Vector2 = world.world_to_screen(Vector2(center.x, -112.0))
 		var nm: Label = plate.get_meta("name")
 		var d: Dictionary = Data.CARRIAGES[c["type"]]
-		if c["type"] == "condenser" and Game.condenser_ready():
+		var t := Game.current_task()
+		var target: bool = t.get("type", "") == c["type"] and not Game.region_done
+		var cost := int(t.get("cost", 0))
+		if target:
+			# The carriage the next task builds or upgrades shows the parts collected for it.
+			var lv := "NEW" if uid == -1 else "UPGRADE"
+			nm.text = "%s %s · %d/%d" % [d["name"], lv, mini(Game.parts, cost), cost]
+			nm.add_theme_color_override("font_color", UIKit.GOLD if Game.parts >= cost else UIKit.TEXT)
+		elif c["type"] == "condenser" and Game.condenser_ready():
 			nm.text = "%s · +%d" % [d["name"], Game.condenser_amount()]
 			nm.add_theme_color_override("font_color", UIKit.GREEN)
 		else:

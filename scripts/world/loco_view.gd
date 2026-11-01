@@ -16,6 +16,11 @@ func _draw() -> void:
 	glow(Vector2(36, -90), 16, Color(0.3, 0.9, 0.8), 0.25 + 0.05 * sin(t * 3.0))
 	glow(Vector2(35, -138), 14, Color(1, 0.85, 0.55), 0.18)
 	CrewSprites.draw(self, Vector2(54, -80), "pilot_b", "panel", t, -1)
+	# Early on the locomotive is the whole train, so it takes the puzzle's heat itself.
+	if heat > 0.02:
+		glow(Vector2(LW * 0.5, -80), 120, Color(1.0, 0.35, 0.15), 0.08 + heat * (0.22 + 0.1 * (0.5 + 0.5 * sin(t * (4.0 + heat * 8.0)))))
+	if frost > 0.01:
+		glow(Vector2(LW * 0.5, -80), 130, Color(0.6, 0.9, 1.0), 0.3 * frost)
 	# Trucks: three wheels each, side frames drawn in front.
 	for tx in [40.0, 160.0]:
 		for k in [-17.0, 0.0, 17.0]:

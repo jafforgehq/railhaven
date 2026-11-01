@@ -69,7 +69,8 @@ const CARRIAGES := {
 	"lab": {"name": "Research Lab", "icon": "flask"},
 	"medbay": {"name": "Med Bay", "icon": "medkit"},
 }
-const START_TRAIN := [["locomotive", 1], ["cooling", 1], ["condenser", 1], ["quarters", 1]]
+## The journey starts with the locomotive alone; every restoration task grows the train.
+const START_TRAIN := [["locomotive", 1]]
 
 
 ## Decorative crew per carriage (the train is a home, not an economy any more).
@@ -97,16 +98,17 @@ const REGIONS := [
 	{
 		"region": "Scorched Desert", "scenery": "desert", "landmark": "tower", "landmark_name": "Climate Tower",
 		"temp": 65, "ground": [0.0, Color(1, 1, 1)],
-		"desc": "The colony boarded here. Cool the carriages, then wake the dormant Climate Tower.",
+		"desc": "Only the old locomotive escaped the heat. Win levels for parts, rebuild the train carriage by carriage, then wake the dormant Climate Tower.",
 		"done_text": "The tower hums once more. Cooler air rolls toward the coast, and the old desalination works lie within reach.",
 		"tasks": [
-			{"text": "Repair the Living Quarters", "cost": 1, "type": "quarters", "level": 2},
+			{"text": "Couple a Cooling Core", "cost": 1, "type": "cooling", "level": 1},
+			{"text": "Couple the Condenser", "cost": 2, "type": "condenser", "level": 1},
+			{"text": "Build the Living Quarters", "cost": 2, "type": "quarters", "level": 1},
 			{"text": "Build a Greenhouse", "cost": 2, "type": "greenhouse", "level": 1},
-			{"text": "Build a Water Recycler", "cost": 2, "type": "recycler", "level": 1},
 			{"text": "Upgrade the Cooling Core", "cost": 3, "type": "cooling", "level": 2},
+			{"text": "Build a Water Recycler", "cost": 3, "type": "recycler", "level": 1},
+			{"text": "Expand the Living Quarters", "cost": 3, "type": "quarters", "level": 2},
 			{"text": "Build a Workshop", "cost": 3, "type": "workshop", "level": 1},
-			{"text": "Grow the Greenhouse", "cost": 3, "type": "greenhouse", "level": 2},
-			{"text": "Build a Drone Bay", "cost": 3, "type": "dronebay", "level": 1},
 			{"text": "Restore the Climate Tower", "cost": 5, "landmark": true},
 		],
 	},
@@ -116,6 +118,7 @@ const REGIONS := [
 		"desc": "A dead plant on a grey sea. Running again, it would turn the whole coast into a water source.",
 		"done_text": "Fresh water pours from the works for the first time in decades. Beyond the coast, the Glass Flats glitter in the heat.",
 		"tasks": [
+			{"text": "Build a Drone Bay", "cost": 3, "type": "dronebay", "level": 1},
 			{"text": "Build a Cargo Hold", "cost": 3, "type": "cargo", "level": 1},
 			{"text": "Upgrade the Water Recycler", "cost": 4, "type": "recycler", "level": 3},
 			{"text": "Expand the Living Quarters", "cost": 4, "type": "quarters", "level": 4},

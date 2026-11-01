@@ -40,6 +40,7 @@ func _tour() -> void:
 	Game.new_game()
 	Game.intro_seen = true
 	main.world.on_region_started()
+	main._rebuild_plates()
 	main.show_home()
 	await _shot("01_home")
 	main.play()
@@ -57,11 +58,18 @@ func _tour() -> void:
 	await _shot("05_win", 1.8)
 	await _close_all(main)
 	main.show_home()
-	Game.parts = 3
-	main._refresh()
 	await _shot("06_home_restore")
 	Game.complete_task()
 	await _shot("07_restored", 1.0)
+	# The next carriage waits as an outline that fills with every win.
+	Game.parts = 1
+	main._refresh()
+	await _shot("07b_ghost_half", 1.2)
+	Game.parts = 2
+	Game.complete_task()
+	Game.parts = 4
+	Game.complete_task()
+	await _shot("07c_four_carriages", 1.2)
 	# A bigger level: two rows, some ash-covered canisters.
 	Game.level = 45
 	main.play()

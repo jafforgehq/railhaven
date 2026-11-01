@@ -59,10 +59,15 @@ static func win(main: Node, r: Dictionary) -> void:
 	if r["bonus"] > 0:
 		v.add_child(UIKit.label("Includes +%d scrap cool bonus for finishing below 70°C" % r["bonus"], "Small", HORIZONTAL_ALIGNMENT_CENTER))
 	var t := Game.current_task()
-	if not t.is_empty() and Game.task_block_reason() == "":
-		var hint := UIKit.label("You can restore: %s" % t["text"], "Accent", HORIZONTAL_ALIGNMENT_CENTER)
+	if not t.is_empty():
+		# Progress toward the next piece of the train, so every win visibly moves it forward.
+		var can := Game.task_block_reason() == ""
+		var hint := UIKit.label(("You can restore: %s" if can else "Next: %s") % t["text"], "Accent" if can else "", HORIZONTAL_ALIGNMENT_CENTER)
 		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		v.add_child(hint)
+		var bar := UIKit.bar(Game.task_progress(), UIKit.GREEN if can else UIKit.GOLD, 14)
+		bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		v.add_child(UIKit.hbox(8, [Icon.make("parts", 24), bar, UIKit.label("%d/%d" % [mini(Game.parts, int(t["cost"])), int(t["cost"])], "Small")]))
 	var cont := UIKit.button("CONTINUE", "TealButton", "check", 72)
 	v.add_child(cont)
 	var panel := _wrap(main, v, false)

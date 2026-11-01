@@ -166,6 +166,22 @@ func current_task() -> Dictionary:
 	return {} if task_index >= tasks.size() else tasks[task_index]
 
 
+## Type of the carriage the current task adds to the train ("" for upgrades and landmarks).
+func next_build() -> String:
+	var t := current_task()
+	if region_done or not t.has("type") or count_type(t["type"]) > 0:
+		return ""
+	return t["type"]
+
+
+## Parts collected toward the current task, 0..1.
+func task_progress() -> float:
+	var t := current_task()
+	if region_done or t.is_empty():
+		return 1.0
+	return clampf(float(parts) / maxf(1.0, float(t["cost"])), 0.0, 1.0)
+
+
 func task_block_reason() -> String:
 	var t := current_task()
 	if t.is_empty():
@@ -194,6 +210,8 @@ func complete_task() -> bool:
 		task_completed.emit(idx)
 		if c.is_empty():
 			c = _add_carriage(t["type"], int(t["level"]))
+			if t["type"] == "condenser":
+				condenser_at = now() # starts collecting from the moment it is coupled
 			carriage_built.emit(c["uid"])
 		else:
 			c["level"] = maxi(c["level"], int(t["level"]))
@@ -360,6 +378,10 @@ func continue_cost(used: int) -> int:
 
 # ---------------------------------------------------------------- condenser
 
+func has_condenser() -> bool:
+	return count_type("condenser") > 0
+
+
 func condenser_level() -> int:
 	return maxi(1, level_of("condenser"))
 
@@ -373,11 +395,11 @@ func condenser_amount() -> int:
 
 
 func condenser_full() -> bool:
-	return condenser_seconds() >= Data.condenser_cap_hours(condenser_level()) * 3600.0 - 1.0
+	return has_condenser() and condenser_seconds() >= Data.condenser_cap_hours(condenser_level()) * 3600.0 - 1.0
 
 
 func condenser_ready() -> bool:
-	return condenser_seconds() >= Data.CONDENSER_MIN_CLAIM and condenser_amount() > 0
+	return has_condenser() and condenser_seconds() >= Data.CONDENSER_MIN_CLAIM and condenser_amount() > 0
 
 
 ## Collects the Condenser's water as scrap; `mult` is 2 after a rewarded ad. A full tank also
@@ -398,6 +420,8 @@ func claim_condenser(mult := 1) -> Dictionary:
 
 
 func condenser_upgrade_block() -> String:
+	if not has_condenser():
+		return "Couple the Condenser first"
 	var lv := condenser_level()
 	if lv >= Data.CONDENSER_MAX:
 		return "Max level"
