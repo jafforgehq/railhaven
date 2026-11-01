@@ -39,16 +39,23 @@ Tap the goal card to jump to wherever the current goal is solved.
 
 Play a level → seal tanks to cool the carriage → win parts + scrap → RESTORE the next task on the train
 (build or upgrade a carriage) → the last task restores the region's landmark → depart to the next region.
+The journey starts with the locomotive alone; the next carriage waits at the end of the train as an
+outline that fills with parts, and every carriage climbs one level at a time to Lv.10 (~level 700).
 
 - **Puzzle rules** (`scripts/puzzle/board.gd`): tanks hold 4 canisters. Tap a tank to lift its top run
   of one colour, tap another tank to pour onto the same colour or into an empty tank. A full one-colour
-  tank seals. Ash-covered canisters (from level 31) stay hidden until exposed.
+  tank seals.
+- **Blockers**, one new kind at a time (intro popup the first time each appears):
+  frozen tank (level 16, thaws after N tanks are sealed), ash canisters (31, hidden until exposed),
+  tagged tank (46, only takes one colour), hot canister (66, flares +8 °C unless sealed within its
+  countdown; sealing it in time cools 2 °C). Later levels mix up to two (three on heatwave levels).
 - **Heat**: each pour heats the carriage by (70 − 30) / move budget; sealing a tank cools 2 °C, and
   seals chained within 3 s make a **cold snap** (3 °C more per link). At 70 °C the level is lost: pay
   scrap or watch an ad to cool 15 °C, or give up (costs a life). Every 10th level is a heatwave level
   (one more colour, double parts).
-- **Levels**: 300 authored levels in `data/levels.json`, generated and proven solvable by
-  `python3 tools/gen_levels.py` (deterministic). Past 300 they repeat with shuffled colours.
+- **Levels**: 1000 authored levels in `data/levels.json`, generated and proven solvable by
+  `python3 tools/gen_levels.py` (deterministic, per-level seeds, runs in parallel in ~1 s; the solver
+  obeys frozen and tagged tanks). Past 1000 they repeat from level 101 with shuffled colours.
 - **Boosters**: Undo, Spare Tank (adds an empty tank), Heat Flush (−12 °C). Bought with scrap.
 - **Lives**: 5, one back every 20 min; refill with scrap or a rewarded ad.
 - **Condenser** (dedicated offline carriage): turns cool night air into scrap while you are away,
@@ -60,11 +67,11 @@ Play a level → seal tanks to cool the carriage → win parts + scrap → RESTO
 
 | Region | Landmark | Tasks | Parts |
 |---|---|---|---|
-| Scorched Desert | Climate Tower | 8 | 22 |
-| Ash Coast | Desalination Works | 9 | 37 |
-| Glass Flats | Mirror Array | 9 | 46 |
-| Drowned City | Seed Archive | 9 | 55 |
-| Green Highlands | Haven | 9 | 65 |
+| Scorched Desert | Climate Tower | 9 | 24 |
+| Ash Coast | Desalination Works | 26 | 133 |
+| Glass Flats | Mirror Array | 23 | 175 |
+| Drowned City | Seed Archive | 19 | 193 |
+| Green Highlands | Haven | 19 | 250 |
 
 ## Layout
 
@@ -73,7 +80,7 @@ scripts/data.gd                 economy, boosters, Condenser, regions + restorat
 scripts/autoloads/game.gd       progress owner: tasks, lives, currencies, Condenser, levels, JSON save
 scripts/autoloads/ads.gd        rewarded-ad facade (test stub until AdMob is linked)
 scripts/autoloads/audio.gd      Music/SFX/Ambience buses, SFX pool, haptics, settings (ConfigFile)
-scripts/puzzle/board.gd         pure sort rules (SortBoard): pour, ash reveal, undo, win/stuck
+scripts/puzzle/board.gd         pure sort rules (SortBoard): pour, blockers, undo, win/stuck
 scripts/puzzle/puzzle_view.gd   draws tanks + canisters, tap input, pour arcs, seals
 scripts/puzzle/puzzle_screen.gd one level: heat gauge, cold snaps, boosters, win/overheat flow
 scripts/main.gd                 root: Home (HUD + home sheet) / Puzzle modes, modals, toasts, coach

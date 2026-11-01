@@ -7,6 +7,7 @@ extends Control
 signal poured(from: int, to: int, result: Dictionary)
 signal selected_tank(index: int)
 signal invalid_move
+signal blocked(text: String) # a tap hit a blocker; the screen explains it
 
 const DIR := "res://assets/sprites/puzzle/"
 const ART := Vector2(160, 420) # tank sprite size (px)
@@ -23,6 +24,7 @@ var _rects: Array[Rect2] = []
 var _lift: Array[float] = []
 var _shake: Array[float] = []
 var _seal: Array[float] = []
+var _ice: Array[float] = [] # frost overlay, fades out when a tank thaws
 var _pending: Array[int] = [] # canisters still flying into each tank
 var _flying: Array = [] # {c, from, to, t, tank}
 var _sparks: Array = [] # {p, v, life}
@@ -33,7 +35,7 @@ var _t := 0.0
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	for n in ["tank_back", "tank_front", "tank_seal", "canister_hidden", "board_bg"] + Data.COLORS.map(func(c): return "canister_" + c):
+	for n in ["tank_back", "tank_front", "tank_seal", "canister_hidden", "board_bg", "tank_ice", "tank_tag", "canister_hot"] + Data.COLORS.map(func(c): return "canister_" + c):
 		var p: String = DIR + n + ".png"
 		if ResourceLoader.exists(p):
 			_tex[n] = load(p)
@@ -48,6 +50,7 @@ func set_board(b: SortBoard) -> void:
 	_sync_arrays()
 	for i in board.tanks.size():
 		_seal[i] = 1.0 if board.is_complete(i) else 0.0
+		_ice[i] = 1.0 if board.is_frozen(i) else 0.0
 	_layout()
 
 
@@ -57,10 +60,12 @@ func _sync_arrays() -> void:
 		_lift.append(0.0)
 		_shake.append(0.0)
 		_seal.append(0.0)
+		_ice.append(0.0)
 		_pending.append(0)
 	_lift.resize(n)
 	_shake.resize(n)
 	_seal.resize(n)
+	_ice.resize(n)
 	_pending.resize(n)
 
 
@@ -81,6 +86,8 @@ func _layout() -> void:
 		th = max_h
 		tw = th * ART.x / ART.y
 	_rects.clear()
+	if board.lock.any(func(x): return x >= 0):
+		row_gap += 10.0 # room for the tags hanging on the rims
 	var top := (size.y - (th * rows + row_gap * (rows - 1))) * 0.5 + 20.0
 	for r in rows:
 		var count := per_row if r == 0 else n - per_row
@@ -127,6 +134,12 @@ func _hit(p: Vector2) -> int:
 
 
 func _tap(i: int) -> void:
+	if board.is_frozen(i):
+		_shake[i] = 0.35
+		Audio.play("error")
+		var left := board.thaw_left(i)
+		blocked.emit("Frozen: seal %d more tank%s to thaw it" % [left, "" if left == 1 else "s"])
+		return
 	if selected < 0:
 		if board.tanks[i].is_empty() or board.is_complete(i) or _pending[i] > 0:
 			_shake[i] = 0.35
@@ -148,6 +161,8 @@ func _tap(i: int) -> void:
 			_shake[i] = 0.35
 			Audio.play("error")
 			invalid_move.emit()
+			if board.lock[i] >= 0 and board.tanks[i].size() < board.cap:
+				blocked.emit("Tagged tank: it only takes %s" % Data.COLORS[board.lock[i]])
 		return
 	var color: int = board.tanks[from][-1]
 	var start_k: int = board.tanks[from].size() - 1
@@ -194,6 +209,7 @@ func refresh_board() -> void:
 	for i in _pending.size():
 		_pending[i] = 0
 		_seal[i] = 1.0 if board.is_complete(i) else 0.0
+		_ice[i] = 1.0 if board.is_frozen(i) else 0.0
 	_layout()
 
 
@@ -210,6 +226,7 @@ func _process(delta: float) -> void:
 	for i in _lift.size():
 		_lift[i] = lerpf(_lift[i], 30.0 if i == selected else 0.0, 1.0 - exp(-delta * 18.0))
 		_shake[i] = maxf(0.0, _shake[i] - delta)
+		_ice[i] = move_toward(_ice[i], 1.0 if board.is_frozen(i) else 0.0, delta * 2.5)
 	for f in _flying:
 		f["t"] += delta / FLY_TIME
 	var done := _flying.filter(func(f): return f["t"] >= 1.0)
@@ -245,7 +262,13 @@ func _draw() -> void:
 			var sr := _slot_rect(i, k, _lift[i])
 			sr.position.x += off.x
 			_draw_canister(sr, t[k], board.hidden[i][k], i == selected and k >= t.size() - board.top_run(i))
+			if k < board.hot[i].size() and board.hot[i][k] > 0:
+				_draw_hot(sr, board.hot[i][k])
 		_draw_tank_front(r, _seal[i])
+		if _ice[i] > 0.0:
+			_draw_ice(r, board.thaw_left(i), _ice[i])
+		if board.lock[i] >= 0:
+			_draw_tag(r, board.lock[i])
 	for f in _flying:
 		var e := clampf(f["t"], 0.0, 1.0)
 		if f["t"] < 0.0:
@@ -280,6 +303,51 @@ func _draw_tank_front(r: Rect2, seal: float) -> void:
 			var s2 := r.size.x / ART.x
 			draw_rect(Rect2(r.position + Vector2(4, 0) * s2, Vector2(152, 26) * s2), Color(0.7, 0.92, 1.0, seal))
 		draw_texture_rect(CarriageView.glow_texture(), r.grow(r.size.x * 0.3), false, Color(0.4, 0.85, 1.0, 0.18 * seal * (0.7 + 0.3 * sin(_t * 3.0))))
+
+
+func _draw_ice(r: Rect2, left: int, a: float) -> void:
+	if _tex.has("tank_ice"):
+		draw_texture_rect(_tex["tank_ice"], r, false, Color(1, 1, 1, a))
+	else:
+		var s := r.size.x / ART.x
+		draw_style_box(UIKit.box(Color(0.75, 0.92, 1.0, 0.45 * a), Color(0.9, 0.98, 1.0, 0.9 * a), 16, 3), Rect2(r.position + Vector2(6, 14) * s, r.size - Vector2(12, 18) * s))
+	if left > 0:
+		_draw_number(r.get_center(), str(left), r.size.x * 0.42, Color(0.1, 0.25, 0.4, a), Color(1, 1, 1, a))
+
+
+func _draw_tag(r: Rect2, c: int) -> void:
+	# A tag hangs on the rim: only colour c may be poured in.
+	var w := r.size.x * 0.82
+	var tr := Rect2(r.get_center().x - w * 0.5, r.position.y - w * 0.5 * 64.0 / 120.0 - 4.0, w, w * 64.0 / 120.0)
+	if _tex.has("tank_tag"):
+		draw_texture_rect(_tex["tank_tag"], tr, false)
+	else:
+		draw_style_box(UIKit.box(Color("5b6470"), Color("c9d1da"), 8, 2), tr)
+	var d := tr.size.y * 0.62
+	var cr := Rect2(tr.get_center() - Vector2(d, d * 0.69) * 0.5, Vector2(d, d * 0.69))
+	_draw_canister(cr, c, false, false)
+
+
+func _draw_hot(sr: Rect2, left: int) -> void:
+	var pulse := 0.5 + 0.5 * sin(_t * (5.0 + 10.0 / maxf(1.0, left)))
+	draw_texture_rect(CarriageView.glow_texture(), sr.grow(sr.size.x * 0.25), false, Color(1.0, 0.4, 0.1, 0.25 + 0.3 * pulse * (1.0 if left <= 3 else 0.5)))
+	if _tex.has("canister_hot"):
+		draw_texture_rect(_tex["canister_hot"], sr, false)
+	else:
+		draw_style_box(UIKit.box(Color(0, 0, 0, 0), Color(1.0, 0.45, 0.15, 0.9), 10, 3), sr.grow(-2))
+	var s := sr.size.x / CAN_W
+	_draw_number(sr.position + Vector2(108, 19) * s, str(left), 26.0 * s, Color(0.5, 0.05, 0.0), Color(1, 0.95, 0.85) if left > 3 else Color(1, 1, 0.6).lerp(Color.WHITE, pulse))
+
+
+func _draw_number(center: Vector2, text: String, fs_f: float, outline: Color, col: Color) -> void:
+	var fs := int(fs_f)
+	if fs < 6:
+		return
+	var font := UIKit.font_bold
+	var sz := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
+	var p := center + Vector2(-sz.x * 0.5, fs * 0.36)
+	draw_string_outline(font, p, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, maxi(2, fs / 6), outline)
+	draw_string(font, p, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 
 
 func _draw_canister(r: Rect2, c: int, is_hidden: bool, lifted: bool) -> void:

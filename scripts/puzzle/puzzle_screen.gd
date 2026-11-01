@@ -62,6 +62,9 @@ func _build() -> void:
 	add_child(view)
 	view.poured.connect(_on_poured)
 	view.selected_tank.connect(func(_i): _tutorial_next(1))
+	view.blocked.connect(func(text: String):
+		_banner.text = text
+		_banner.add_theme_color_override("font_color", UIKit.ORANGE))
 
 	_banner = UIKit.label("", "Value", HORIZONTAL_ALIGNMENT_CENTER)
 	_banner.add_theme_color_override("font_color", UIKit.ORANGE)
@@ -138,6 +141,13 @@ func start(n: int) -> void:
 	_tutorial_step = 0 if n == 1 and not Game.tutorial["first_pour"] else -1
 	_tutorial_next(0)
 	_layout.call_deferred()
+	# First time a blocker shows up, explain it (one per level).
+	for kind in Data.BLOCKERS:
+		var has: bool = data.has(kind) and (kind != "hidden" or data[kind].any(func(r): return r.has(true)))
+		if has and not Game.tutorial.get("blk_" + kind, false):
+			Game.tutorial["blk_" + kind] = true
+			Popups.blocker.call_deferred(main, kind)
+			break
 
 
 func _process(delta: float) -> void:
@@ -166,6 +176,16 @@ func _on_poured(_from: int, _to: int, result: Dictionary) -> void:
 		_tutorial_next(2)
 	if result["completed"]:
 		_on_seal()
+	for k in result.get("thawed", []):
+		_float("THAWED!", Color("bff4ff"))
+		Audio.play("upgrade")
+	if result.get("defused", 0) > 0:
+		heat = maxf(Game.start_heat() - 5.0, heat - Data.HOT_DEFUSE_COOL * result["defused"])
+		_float("HOT CANISTER SEALED  -%d°C" % int(Data.HOT_DEFUSE_COOL * result["defused"]), Color("7fe8ff"))
+	if result.get("flared", 0) > 0:
+		heat += Data.HOT_FLARE * result["flared"]
+		_float("FLARE!  +%d°C" % int(Data.HOT_FLARE * result["flared"]), UIKit.RED)
+		Audio.play("alarm", 0.1)
 	_update()
 	if board.is_won():
 		_win()
@@ -176,6 +196,10 @@ func _on_poured(_from: int, _to: int, result: Dictionary) -> void:
 		_banner.text = "No moves left! Use Undo or a Spare Tank" if help else "No moves left!"
 		if not help:
 			_overheat(true)
+	elif not board.hot_left().is_empty() and board.hot_left().min() <= 3:
+		var left: int = board.hot_left().min()
+		_banner.text = "Hot canister flares in %d move%s!" % [left, "" if left == 1 else "s"]
+		_banner.add_theme_color_override("font_color", UIKit.RED)
 	else:
 		_banner.text = ""
 
@@ -254,7 +278,7 @@ func _use_booster(id: String) -> void:
 			board.undo()
 			view.refresh_board()
 		"tank":
-			if board.tanks.size() >= 12:
+			if board.tanks.size() >= 14:
 				return
 			Game.use_booster(id)
 			board.add_tank()

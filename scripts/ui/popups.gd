@@ -368,6 +368,21 @@ static func _confirm_reset(main: Node, parent: Control) -> void:
 		main.show_home())
 
 
+## Explains a blocker the first time a level uses it.
+static func blocker(main: Node, kind: String) -> void:
+	var d: Dictionary = Data.BLOCKERS[kind]
+	var v := _modal_box(600)
+	v.add_child(_big_icon(d["icon"], 96, Color("9fe6ff")))
+	v.add_child(_title("NEW: " + d["title"], ""))
+	var l := UIKit.wrap_label(d["text"], "")
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(l)
+	var ok := UIKit.button("GOT IT", "TealButton", "check", 66)
+	v.add_child(ok)
+	var panel := _wrap(main, v, false)
+	ok.pressed.connect(func(): main.close_modal_of(panel))
+
+
 static func how_to_play(main: Node) -> void:
 	var v := _modal_box(600)
 	v.add_child(_title("HOW TO PLAY", "Keep the last train cool"))

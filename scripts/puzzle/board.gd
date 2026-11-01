@@ -3,11 +3,16 @@ extends RefCounted
 ## Pure coolant-sort rules (no drawing): tanks hold up to CAPACITY canisters, bottom to top.
 ## A pour moves the whole run of matching canisters on top of a tank onto an empty tank or onto
 ## the same colour, as far as there is room. Ash-covered canisters stay hidden until exposed.
+## Blockers: a frozen tank thaws once enough other tanks are sealed; a tagged tank only takes
+## one colour; a hot canister flares (heat spike) unless its tank is sealed within its countdown.
 
 var cap := Data.CAPACITY
 var tanks: Array = [] # Array of Array[int] (colour index), bottom -> top
 var hidden: Array = [] # parallel Array of Array[bool]
-var history: Array = [] # [from, to, n, revealed: Array of [tank, index]]
+var hot: Array = [] # parallel Array of Array[int]: pours left before the canister flares (0 = calm)
+var frozen: Array = [] # per tank: sealed tanks needed to thaw it (0 = not frozen)
+var lock: Array = [] # per tank: the only colour it accepts (-1 = any)
+var history: Array = [] # [from, to, n, revealed: Array of [tank, index], hot snapshot]
 
 
 func load_level(level: Dictionary) -> void:
@@ -24,6 +29,36 @@ func load_level(level: Dictionary) -> void:
 			hidden[i][k] = bool(row[k])
 		if not tanks[i].is_empty():
 			hidden[i][-1] = false # the top canister is always visible
+	var fz: Array = level.get("frozen", [])
+	var lk: Array = level.get("lock", [])
+	frozen = []
+	lock = []
+	hot = []
+	for i in tanks.size():
+		frozen.append(int(fz[i]) if i < fz.size() else 0)
+		lock.append(int(lk[i]) if i < lk.size() else -1)
+		hot.append(tanks[i].map(func(_x): return 0))
+	for h in level.get("hot", []): # [tank, index, pours]
+		if int(h[0]) < tanks.size() and int(h[1]) < tanks[int(h[0])].size():
+			hot[int(h[0])][int(h[1])] = int(h[2])
+			hidden[int(h[0])][int(h[1])] = false
+
+
+func sealed_count() -> int:
+	var n := 0
+	for i in tanks.size():
+		if is_complete(i):
+			n += 1
+	return n
+
+
+## Seals still needed before tank i thaws (0 = free).
+func thaw_left(i: int) -> int:
+	return maxi(0, frozen[i] - sealed_count()) if i < frozen.size() else 0
+
+
+func is_frozen(i: int) -> bool:
+	return thaw_left(i) > 0
 
 
 func colors_used() -> int:
@@ -64,23 +99,41 @@ func can_pour(i: int, j: int) -> int:
 		return 0
 	var a: Array = tanks[i]
 	var b: Array = tanks[j]
-	if a.is_empty() or b.size() >= cap or is_complete(i):
+	if a.is_empty() or b.size() >= cap or is_complete(i) or is_frozen(i) or is_frozen(j):
 		return 0
 	if not b.is_empty() and b[-1] != a[-1]:
+		return 0
+	if lock[j] >= 0 and a[-1] != lock[j]:
 		return 0
 	return mini(top_run(i), cap - b.size())
 
 
 ## Performs a pour. Returns {} if not allowed, else {n, completed (target is now full),
-## revealed: Array of [tank, index]}.
+## revealed: Array of [tank, index], thawed: tanks that thawed, flared / defused: hot canisters}.
 func pour(i: int, j: int) -> Dictionary:
 	var n := can_pour(i, j)
 	if n == 0:
 		return {}
+	var hot_before := hot.duplicate(true)
+	var was_frozen := range(tanks.size()).filter(func(k): return is_frozen(k))
 	for k in n:
 		tanks[j].append(tanks[i].pop_back())
 		hidden[j].append(false)
 		hidden[i].pop_back()
+		hot[j].append(hot[i].pop_back())
+	var defused := 0
+	var flared := 0
+	for t in tanks.size():
+		for k in hot[t].size():
+			if hot[t][k] <= 0:
+				continue
+			if is_complete(t):
+				hot[t][k] = 0 # sealed in time
+				defused += 1
+			else:
+				hot[t][k] -= 1
+				if hot[t][k] == 0:
+					flared += 1
 	var revealed := []
 	if not tanks[i].is_empty() and hidden[i][-1]:
 		hidden[i][-1] = false
@@ -90,8 +143,9 @@ func pour(i: int, j: int) -> Dictionary:
 			if hidden[j][k]:
 				hidden[j][k] = false
 				revealed.append([j, k])
-	history.append([i, j, n, revealed])
-	return {"n": n, "completed": is_complete(j), "revealed": revealed}
+	history.append([i, j, n, revealed, hot_before])
+	var thawed := was_frozen.filter(func(k): return not is_frozen(k))
+	return {"n": n, "completed": is_complete(j), "revealed": revealed, "thawed": thawed, "flared": flared, "defused": defused}
 
 
 func can_undo() -> bool:
@@ -108,12 +162,28 @@ func undo() -> bool:
 		tanks[h[0]].append(tanks[h[1]].pop_back())
 		hidden[h[0]].append(false)
 		hidden[h[1]].pop_back()
+	hot = h[4]
+	while hot.size() < tanks.size(): # spare tanks added after that pour (empty again by now)
+		hot.append([])
 	return true
 
 
 func add_tank() -> void:
 	tanks.append([])
 	hidden.append([])
+	hot.append([])
+	frozen.append(0)
+	lock.append(-1)
+
+
+## Hot canisters still ticking (for the screen's warning).
+func hot_left() -> Array:
+	var out := []
+	for t in tanks.size():
+		for k in hot[t].size():
+			if hot[t][k] > 0:
+				out.append(hot[t][k])
+	return out
 
 
 func is_won() -> bool:

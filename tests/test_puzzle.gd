@@ -63,6 +63,43 @@ func _board_rules() -> void:
 	r = full.pour(1, 0)
 	check(r["completed"] and not full.hidden[0][0], "completing a tank reveals its ash")
 
+	# Frozen tank: no pours in or out until enough tanks are sealed; undo refreezes it.
+	var f := SortBoard.new()
+	f.load_level({"tanks": [[0, 0, 0], [1, 1, 1, 0], [1], []], "frozen": [0, 1, 0, 0]})
+	check(f.is_frozen(1) and f.can_pour(1, 3) == 0 and f.can_pour(2, 1) == 0, "frozen tank is shut")
+	r = f.pour(1, 0)
+	check(r.is_empty(), "cannot pour out of a frozen tank")
+	f.frozen[1] = 1
+	var g := SortBoard.new()
+	g.load_level({"tanks": [[0, 0, 0], [1, 1, 1, 0], [0], []], "frozen": [0, 1, 0, 0]})
+	r = g.pour(2, 0)
+	check(r["completed"] and r["thawed"] == [1] and not g.is_frozen(1), "sealing a tank thaws it")
+	check(g.can_pour(1, 3) == 1, "a thawed tank pours")
+	g.undo()
+	check(g.is_frozen(1), "undoing the seal refreezes it")
+
+	# Tagged tank only takes its colour.
+	var t := SortBoard.new()
+	t.load_level({"tanks": [[0, 1], [1, 0], []], "lock": [-1, -1, 1]})
+	check(t.can_pour(0, 2) == 1 and t.can_pour(1, 2) == 0, "tagged tank only accepts its colour")
+
+	# Hot canister: counts down per pour, flares at zero, defused when its tank is sealed.
+	var hc := SortBoard.new()
+	hc.load_level({"tanks": [[2, 2, 2], [2], [3, 3], []], "hot": [[1, 0, 2]]})
+	r = hc.pour(2, 3)
+	check(r["flared"] == 0 and hc.hot_left() == [1], "hot canister counts down")
+	hc.undo()
+	check(hc.hot_left() == [2], "undo restores the countdown")
+	r = hc.pour(1, 0)
+	check(r["completed"] and r["defused"] == 1 and hc.hot_left().is_empty(), "sealing defuses it")
+	var hf := SortBoard.new()
+	hf.load_level({"tanks": [[2, 2, 2], [2], [3, 3], []], "hot": [[1, 0, 1]]})
+	r = hf.pour(2, 3)
+	check(r["flared"] == 1 and hf.hot_left().is_empty(), "countdown at zero flares once")
+	hf.add_tank()
+	hf.undo()
+	check(hf.hot.size() == hf.tanks.size(), "undo after a spare tank keeps flags aligned")
+
 	# Stuck detection and the spare tank.
 	var s := SortBoard.new()
 	s.load_level({"tanks": [[0, 1, 0, 1], [1, 0, 1, 0]]})
@@ -73,7 +110,7 @@ func _board_rules() -> void:
 
 func _levels() -> void:
 	var n: int = root.get_node("Game").level_count()
-	check(n >= 300, "300 authored levels (%d)" % n)
+	check(n >= 1000, "1000 authored levels (%d)" % n)
 	var ok := true
 	var bad := ""
 	for i in range(1, n + 1):
@@ -87,11 +124,25 @@ func _levels() -> void:
 		var each_four := counts.values().all(func(v): return v == Data.CAPACITY)
 		var empties: int = d["tanks"].filter(func(t): return t.is_empty()).size()
 		var fine: bool = cap_ok and each_four and empties >= 1 and int(d["moves"]) >= int(d["solution"]) and counts.size() <= Data.COLORS.size()
+		var nt: int = d["tanks"].size()
+		fine = fine and nt <= 12 and d.get("frozen", []).all(func(x): return int(x) < counts.size())
+		fine = fine and d.get("lock", []).all(func(x): return int(x) < counts.size()) and d.get("frozen", []).size() in [0, nt]
+		for h in d.get("hot", []):
+			fine = fine and int(h[0]) < nt and int(h[1]) < d["tanks"][int(h[0])].size() and int(h[2]) > 0 and int(h[2]) < int(d["moves"])
 		if not fine:
 			ok = false
 			bad = "level %d" % i
 			break
-	check(ok, "every level has 4 of each colour, an empty tank and a move budget >= its solution %s" % bad)
+	check(ok, "every level has 4 of each colour, an empty tank, sane blockers and a move budget >= its solution %s" % bad)
+	var first := {}
+	for i in range(1, n + 1):
+		var d: Dictionary = root.get_node("Game").level_data(i)
+		for k in ["frozen", "lock", "hot"]:
+			if d.has(k) and not first.has(k):
+				first[k] = i
+	check(first.get("frozen") == 16 and first.get("lock") == 46 and first.get("hot") == 66, "blockers arrive one at a time %s" % str(first))
+	var late: Dictionary = root.get_node("Game").level_data(n + 846)
+	check(late.has("lock") and late["lock"].all(func(x): return int(x) < Data.COLORS.size()), "repeated levels keep valid tag colours")
 	var big: Dictionary = root.get_node("Game").level_data(n + 57)
 	check(big["tanks"].size() >= 9, "levels past the authored set repeat with shuffled colours")
 	check(root.get_node("Game").level_data(1)["tanks"].size() == 3, "level 1 is the hand-made tutorial")
@@ -166,11 +217,13 @@ func _progress(g: Node) -> void:
 	check(not g.claim_daily().is_empty() and not g.daily_ready(), "daily drop once per cooldown")
 
 	# Save round-trip.
+	g.tutorial["blk_frozen"] = true
 	var d: Dictionary = JSON.parse_string(JSON.stringify(g.to_dict()))
 	var lv: int = g.level
 	var reg: int = g.region_index
 	g.new_game()
 	g.from_dict(d)
+	check(g.tutorial.get("blk_frozen", false), "blocker intro flags survive a save")
 	check(g.level == lv and g.region_index == reg and g.condenser_level() == 2 and typeof(g.carriages[0]["uid"]) == TYPE_INT, "save round-trip")
 	var old := {"version": 2, "res": {}, "carriages": []}
 	check(int(old["version"]) < Data.SAVE_VERSION, "idle saves (v1/v2) are older than the puzzle save version")

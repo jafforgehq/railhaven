@@ -270,6 +270,8 @@ static func level_data(n: int) -> Dictionary:
 		perm[j] = tmp
 	var out := src.duplicate(true)
 	out["tanks"] = src["tanks"].map(func(t): return t.map(func(x): return perm[int(x)]))
+	if src.has("lock"):
+		out["lock"] = src["lock"].map(func(x): return perm[int(x)] if int(x) >= 0 else -1)
 	return out
 
 
@@ -542,8 +544,8 @@ func from_dict(d: Dictionary) -> void:
 	for k in stats:
 		stats[k] = int(st.get(k, 0))
 	var tu: Dictionary = d.get("tutorial", {})
-	for k in tutorial:
-		tutorial[k] = bool(tu.get(k, false))
+	for k in tu: # includes the blk_<kind> flags for blocker intros already shown
+		tutorial[k] = bool(tu[k])
 	intro_seen = bool(d.get("intro_seen", true))
 	_tick_lives()
 
