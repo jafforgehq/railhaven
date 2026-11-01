@@ -252,7 +252,7 @@ func _on_changed() -> void:
 	for c in Game.carriages:
 		open_slots += maxi(0, Game.free_slots(c["uid"]))
 	_tab_buttons["crew"].get_meta("dot").visible = idle > 0 and open_slots > 0
-	_tab_buttons["journey"].get_meta("dot").visible = Game.stage_block_reason() == "" or (Game.any_contract_claimable() and (Game.chapter > 0 or Game.goal_index >= 8)) or (Game.chapter_done and not Game.is_last_chapter())
+	_tab_buttons["journey"].get_meta("dot").visible = Game.stage_block_reason() == "" or (Game.any_contract_claimable() and Game.tutorial_done()) or (Game.chapter_done and not Game.is_last_chapter())
 	for m in _modal_stack:
 		if m.has_method("refresh"):
 			m.refresh()

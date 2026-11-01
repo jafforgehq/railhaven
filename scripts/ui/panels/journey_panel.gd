@@ -166,7 +166,7 @@ func _build_stages() -> void:
 ## Supply contracts: three side tasks with progress bars and CLAIM buttons.
 func _refresh_contracts() -> void:
 	# Contracts unlock after the first-chapter tutorial so new players see one thing at a time.
-	_contracts.visible = Game.chapter > 0 or Game.goal_index >= 8
+	_contracts.visible = Game.tutorial_done()
 	if not _contracts.visible:
 		return
 	var sig := ""

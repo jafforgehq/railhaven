@@ -163,6 +163,7 @@ func refresh() -> void:
 	if _bar:
 		_bar.value = float(c["timer"]) / Game.drone_run_time() if c["active"] else 0.0
 	if _boost:
+		_boost.visible = Game.tutorial_done()
 		var lbl: Label = _boost.get_meta("label")
 		if c["boost"] > 0.0:
 			lbl.text = "x2 · %s" % UIKit.fmt_time(c["boost"])

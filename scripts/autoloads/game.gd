@@ -185,6 +185,11 @@ func train_length() -> int:
 	return ch()["train"]
 
 
+## Side systems (contracts, Overdrive) stay hidden until the first-chapter tutorial is over.
+func tutorial_done() -> bool:
+	return chapter > 0 or goal_index >= 8
+
+
 func is_last_chapter() -> bool:
 	return chapter >= Data.CHAPTERS.size() - 1
 

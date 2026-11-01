@@ -1,10 +1,11 @@
-# Railhaven: Scorched Line — first playable
+# Railhaven: Scorched Line
 
 Portrait mobile idle colony game (Godot 4.7, GDScript, Mobile renderer with 4x MSAA 2D, falls back to OpenGL).
-Outside it is 65 °C (78 °C in a heatwave); the colony lives aboard an armored train that never stops.
+Outside it is 60–68 °C depending on the region; the colony lives aboard an armored train that never stops.
+The journey runs through five regions and takes roughly 20+ hours of game time (see Test).
 All art is made in **Blender** from Python scripts in `art/blender/`: toon-shaded, outlined models rendered
-orthographically to sprites (crew animations and portraits, every carriage type at levels 1–5, the locomotive,
-wheels and rods, drones, scenery strips, the Climate Tower, item icons). Godot only adds in-engine effects on top:
+orthographically to sprites (crew animations and portraits, every carriage type at levels 1–10, the locomotive,
+wheels and rods, drones, scenery strips per region, five landmarks, item icons). Godot only adds in-engine effects on top:
 lamp light cones, glows, sparks, bubbles, smoke, dust and weather tints.
 
 ## Art pipeline (Blender only)
@@ -15,13 +16,14 @@ art/build_all.sh                       # rebuild every asset (≈3 min), output 
 
 | Script | Output |
 |---|---|
-| `art/blender/crew.py` + `art/build_sprites.py` | 10 crew presets × 8 animations (sheet), sleep pose, portrait |
-| `art/blender/carriages.py` | `carriage_<type>_<level>.png`, `locomotive.png`, wheels, rod, fan rotor, drones |
-| `art/blender/scenery.py` | sky, far/mid/near/track/front parallax strips (tile at 720 units), tower (dormant/restored) |
+| `art/blender/crew.py` + `art/build_sprites.py` | 14 crew presets (7 roles) × 8 animations (sheet), sleep pose, portrait |
+| `art/blender/carriages.py` | `carriage_<type>_<level>.png` (9 types × 10 levels), `locomotive.png`, wheels, rod, fan rotor, drones |
+| `art/blender/scenery.py` | sky, far/mid/near/track/front parallax strips (tile at 720 units); sky/far/mid per region; 5 landmarks (dormant/restored) |
 | `art/blender/icons.py` | resource / item icons (UI glyphs such as ✓ + × stay vector) |
 | `art/blender/common.py` | shared toon material (3 light bands + AO), inverted-hull outlines, primitives, ortho render |
 
-Sprite sheets import as VRAM-compressed (ASTC on mobile) with mipmaps.
+Sprite sheets import as VRAM-compressed (ASTC on mobile) with mipmaps; icons and portraits stay lossless.
+After adding new renders run `art/fix_imports.sh` to import them with those settings.
 
 ## Run
 
@@ -37,7 +39,8 @@ Tap the goal card to jump to wherever the current goal is solved.
 ## Core loop
 
 Drones salvage scrap automatically → the workshop turns scrap into parts (2:1) → build / upgrade carriages →
-more beds, food and water → survivors arrive → more workers → more production → restore the Climate Tower.
+more beds, food and water → survivors arrive → more workers → more production → restore the region's landmark →
+depart for the next region.
 
 | Carriage | Effect |
 |---|---|
@@ -48,12 +51,28 @@ more beds, food and water → survivors arrive → more workers → more product
 | Workshop | Converts scrap into parts per worker |
 | Cooling Module | Raises how many carriages the train can support (+1 when staffed) |
 | Drone Bay | Drones repeat salvage runs automatically; pilots add +25% yield each |
+| Cargo Hold (ch 2) | Storage for every resource (grows ×2 per level, so costs always fit) |
+| Research Lab (ch 2) | Scientists make data; data + parts buy research (one project at a time) |
+| Med Bay (ch 3) | Medics give the whole train up to +60% efficiency and faster arrivals |
 
-- Each survivor eats and drinks 0.6/min. Matching specialists (Engineer → Workshop, Grower → Greenhouse, …) work at 125%.
+| Chapter | Region | Landmark | Temp | Level cap | Train | Region bonus |
+|---|---|---|---|---|---|---|
+| 1 | Scorched Desert | Climate Tower | 65 °C | 5 | 10 | – |
+| 2 | Ash Coast | Desalination Works | 62 °C | 6 | 12 | +25% water |
+| 3 | Glass Flats | Mirror Array | 68 °C | 7 | 15 | +20% parts |
+| 4 | Drowned City | Seed Archive | 64 °C | 8 | 17 | +30% scrap |
+| 5 | Green Highlands | Haven | 60 °C | 10 | 20 | +30% food |
+
+- Each survivor eats and drinks 0.6/min. Matching specialists (Engineer → Workshop, Scientist → Lab, Medic → Med Bay, …) work at 125%.
+- **Crew levels**: workers gain experience while working (Lv 1–10, +6% output per level).
+- **Research**: 24 permanent projects (drone haul, output, storage, upkeep, cost, offline time, XP, …), unlocked by chapter.
+- **Supply contracts**: three side tasks with rewards (after the tutorial); a claimed slot offers a new one after 30 min of play.
+- **Achievements**: 22 milestones with automatic rewards (Journey → Achievements).
+- **Overdrive**: tap in a producing carriage to double its output for 60 s (10 min cooldown).
 - **Automatic safe mode**: if food or water runs out, the crew rations (half upkeep, production −30%, growth paused). Nobody dies, online or offline.
-- **Offline**: on launch / resume the sim fast-forwards up to 8 h in 5 s steps with the same rules (storage caps, upkeep, safe mode, drones, journey) and shows a "While you were away" report.
-- **Events** (after the tutorial goals): Heatwave, Sandstorm, Distress Signal — each a two-option priority choice; no answer within 25 s picks the safe option.
-- **Chapter 1**: 11 sequential goals ending with *Restore the Climate Tower*: once the train is within 120 km drone range, three drone expeditions consume parts and water. Completion unlocks the Ash Coast region (55 °C, +25% water, +1 cooling) and a cooler palette.
+- **Offline**: on launch / resume the sim fast-forwards up to 8 h (more with research) in 5 s steps with the same rules and shows a "While you were away" report.
+- **Events**: Heatwave, Sandstorm, Distress Signal, then Trader, Broken Rail, Ash Storm (ch 2+) and Raiders (ch 3+). Each is a two-option choice; costs scale per chapter; no answer within 25 s picks the safe option.
+- **Saves**: JSON, versioned (v2). v1 saves load into chapter 1 and can depart for chapter 2.
 
 ## Layout
 
@@ -84,7 +103,8 @@ Patterns (chosen / rejected):
 ```bash
 G=/Applications/Godot.app/Contents/MacOS/Godot
 $G --headless --path . -s tests/test_sim.gd          # economy self-check, prints PASS/FAILED
-$G --headless --path . -s tests/bot_playthrough.gd   # pacing: minutes per goal
+$G --headless --path . -s tests/bot_playthrough.gd   # pacing of the whole journey (add "-- quiet" / "passive")
+$G --path . -- --shots=/tmp/railhaven_shots --regions    # every region + landmark, research and crew sheets
 $G --path . -- --shots=/tmp/railhaven_shots              # screenshot every screen + simulated tap/drag checks
 $G --path . -- --shots=/tmp/railhaven_shots --gallery    # every carriage type at Lv 1/3/5
 $G --path . -- --shots=/tmp/railhaven_shots --chars      # every crew preset + portraits
