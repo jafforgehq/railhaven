@@ -178,6 +178,8 @@ func _regions() -> void:
 			Game.complete_task()
 		await _close_all(main)
 		main.show_home()
+		await get_tree().create_timer(1.5).timeout # the livery popup opens 1.1 s after a build
+		await _close_all(main)
 		await _shot("r%d_%s" % [r + 1, Game.region()["scenery"]], 1.2)
 		if not Game.advance_region():
 			break

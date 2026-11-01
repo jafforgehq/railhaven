@@ -1,5 +1,22 @@
 # Railhaven: Scorched Line
 
+> **Archived learning project.** Development has stopped and the game will not be released.
+> The code is shared as a reference for building a complete mobile game in Godot 4 with scripted art.
+
+What may be useful to learn from:
+- **Art made only from code**: every sprite, carriage, crew member, landmark and icon is rendered by
+  headless Blender Python scripts (`art/blender/`) with a toon material and inverted-hull outlines.
+- **Puzzle levels proven solvable**: a Python solver generates 1000 levels with 10 blocker types
+  (`tools/gen_levels.py`), and the tests replay its solutions on the real GDScript board.
+- **A physics mini-game in its own world**: pull-the-pin rescue with RigidBody2D balls in a SubViewport,
+  checked by deterministic physics tests (`tests/test_rescue.gd`).
+- **Mobile meta systems**: login calendar, win streak, story bubbles, liveries, postcard album, Heat Run,
+  weekly race, an offline-earnings carriage.
+- **A screenshot tour for layout review without a device** (`scripts/debug/shots.gd`).
+- **A pivot**: it began as an idle colony game (git tag `v0.1-idle`) and became a sort puzzle after
+  market research.
+- **iOS shipping from the command line**: Godot export, `xcodebuild` archive, TestFlight upload.
+
 Portrait mobile **coolant-sort puzzle** game with a train-restoration meta (Godot 4.7, GDScript,
 Mobile renderer with 4x MSAA 2D). The world is 60–68 °C; the colony lives on an armored train.
 Every level is a carriage overheating: sort coloured coolant canisters into one-colour tanks before the
@@ -7,7 +24,7 @@ heat gauge reaches 70 °C. Wins earn parts that restore the train, region by reg
 by restoring a landmark. The idle colony version is preserved at git tag `v0.1-idle`.
 All art is made in **Blender** from Python scripts in `art/blender/`.
 
-Current version: **0.0.3** (iOS build 9), distributed through TestFlight.
+Last version: **0.0.3** (iOS build 9). Earlier builds were tested through TestFlight.
 
 ## Screenshots
 
@@ -23,9 +40,15 @@ Current version: **0.0.3** (iOS build 9), distributed through TestFlight.
 <img src="docs/screenshots/07_race.jpg" width="180" alt="Weekly race">
 <img src="docs/screenshots/08_highlands.jpg" width="180" alt="Green Highlands, the last region">
 </p>
+<p>
+<img src="docs/screenshots/09_desert.jpg" width="180" alt="Scorched Desert, region 1">
+<img src="docs/screenshots/10_ash_coast.jpg" width="180" alt="Ash Coast, region 2">
+<img src="docs/screenshots/11_glass_flats.jpg" width="180" alt="Glass Flats, region 3">
+<img src="docs/screenshots/12_drowned_city.jpg" width="180" alt="Drowned City, region 4">
+</p>
 
 Home · landmark boss with combo charges · conveyor level · win popup · Juno and Sandy the fox ·
-pull-the-pin rescue · weekly race · Green Highlands. Refresh them with the screenshot tour (see Test).
+pull-the-pin rescue · weekly race · Green Highlands. Second row: the other four regions. Refresh them with the screenshot tour (see Test).
 
 ## Art pipeline (Blender only)
 
