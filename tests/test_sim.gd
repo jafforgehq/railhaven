@@ -129,7 +129,12 @@ func _initialize() -> void:
 	check(g.unlocked("cargo") and g.unlocked("lab") and not g.unlocked("medbay"), "chapter 2 unlocks cargo hold and lab")
 	check(g.build_block_reason("medbay").begins_with("Unlocks in Chapter"), "med bay still locked")
 	check(not g.advance_chapter(), "cannot skip a chapter")
-	check(g.contracts.all(func(c): return c.get("id", "") == "" or c.get("n", 0.0) >= 3.0), "contracts re-issued on departure")
+	var rescaled := true
+	for c in g.contracts:
+		var cd: Dictionary = g.contract_def(c.get("id", ""))
+		if not cd.is_empty() and not cd.get("fixed", false):
+			rescaled = rescaled and c["n"] == round(cd["n"] * Data.CONTRACT_SCALE[1] / 10.0) * 10.0
+	check(rescaled, "contracts re-issued at the new chapter's scale on departure")
 
 	# Research.
 	g.res["scrap"] = 50000.0

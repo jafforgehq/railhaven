@@ -59,5 +59,5 @@ Rejected: prestige reset (would repeat ch1 instead of adding content), a 5th top
   one Living Quarters too small at the level cap (second-quarters goal, bigger beds at Lv 6+).
 - 2026-11-01: M5/M6 Blender art from two agents (scenery/landmarks/icons; carriages Lv 6–10, 3 new
   types, Scientist/Medic). Shared ground strips use a desaturate+tint shader per region.
-- 2026-11-01: M7 balance. Active bot (Overdrive + contracts, checks every 6 s) 19h46–20h54;
+- 2026-11-01: M7 balance. Active bot (Overdrive + contracts, checks every 6 s) 20h09–21h07;
   passive bot 21–22h+. Longest wall 1h30 = the final Haven expedition timer.
