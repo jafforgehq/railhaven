@@ -323,9 +323,11 @@ func _draw_tag(r: Rect2, c: int) -> void:
 		draw_texture_rect(_tex["tank_tag"], tr, false)
 	else:
 		draw_style_box(UIKit.box(Color("5b6470"), Color("c9d1da"), 8, 2), tr)
-	var d := tr.size.y * 0.62
-	var cr := Rect2(tr.get_center() - Vector2(d, d * 0.69) * 0.5, Vector2(d, d * 0.69))
-	_draw_canister(cr, c, false, false)
+	# Canister icon in the tag's 44 px socket at (60, 32) of the 120x64 sprite.
+	var cw := tr.size.x * 0.32
+	var ch := cw * SLOT_H / CAN_W
+	var sc := tr.position + tr.size * Vector2(60.0 / 120.0, 32.0 / 64.0)
+	_draw_canister(Rect2(sc - Vector2(cw, ch) * 0.5, Vector2(cw, ch)), c, false, false)
 
 
 func _draw_hot(sr: Rect2, left: int) -> void:
