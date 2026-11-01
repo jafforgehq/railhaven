@@ -61,3 +61,5 @@ Rejected: prestige reset (would repeat ch1 instead of adding content), a 5th top
   types, Scientist/Medic). Shared ground strips use a desaturate+tint shader per region.
 - 2026-11-01: M7 balance. Active bot (Overdrive + contracts, checks every 6 s) 20h09–21h07;
   passive bot 21–22h+. Longest wall 1h30 = the final Haven expedition timer.
+- 2026-11-01: iOS export OK (exit 0). Pack is 135 MB (ASTC only; 90 carriage textures + 14 crew
+  sheets at native 4 px/unit). Option if size matters: Basis Universal import for carriages.
