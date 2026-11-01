@@ -13,6 +13,10 @@ var _launch: Button
 var _launch_cost: HBoxContainer
 var _launch_reason: Label
 var _goals_btn: Button
+var _contracts: VBoxContainer
+var _con_rows := [] # per slot: [bar, label, button-or-null]
+var _con_sig := ""
+var _ach_btn: Button
 
 
 func build() -> void:
@@ -46,10 +50,17 @@ func build() -> void:
 		var perk := UIKit.label("Region bonus here: %s" % c["perk_text"], "Small")
 		perk.add_theme_color_override("font_color", UIKit.TEAL)
 		body.add_child(perk)
+	_contracts = UIKit.vbox(6)
+	body.add_child(_contracts)
 	_goals_btn = UIKit.button("CHAPTER GOALS", "", "star", 54)
 	_goals_btn.pressed.connect(func(): Popups.goals(main))
-	body.add_child(_goals_btn)
+	_goals_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_ach_btn = UIKit.button("ACHIEVEMENTS", "", "trophy", 54)
+	_ach_btn.pressed.connect(func(): Popups.achievements(main))
+	_ach_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body.add_child(UIKit.hbox(8, [_goals_btn, _ach_btn]))
 	_sig = ""
+	_con_sig = ""
 
 
 func refresh() -> void:
@@ -78,7 +89,9 @@ func refresh() -> void:
 		UIKit.clear(_launch_cost)
 		_launch_cost.add_child(UIKit.cost_row(Game.stages()[mini(Game.tower_stage, n_st - 1)]["cost"], 24))
 	var gl := Game.goals()
-	_goals_btn.get_meta("label").text = "CHAPTER GOALS  %d/%d" % [mini(Game.goal_index, gl.size()), gl.size()]
+	_goals_btn.get_meta("label").text = "GOALS  %d/%d" % [mini(Game.goal_index, gl.size()), gl.size()]
+	_ach_btn.get_meta("label").text = "ACHIEVEMENTS  %d/%d" % [Game.achievements.size(), Data.ACHIEVEMENTS.size()]
+	_refresh_contracts()
 	if _exp_bar and Game.expedition >= 0.0 and Game.tower_stage < n_st:
 		var t: float = Game.stages()[Game.tower_stage]["time"]
 		_exp_bar.value = 1.0 - Game.expedition / t
@@ -148,6 +161,59 @@ func _build_stages() -> void:
 				if Game.advance_chapter():
 					Audio.play("whistle"))
 			_stages.add_child(UIKit.panel("CardGold", UIKit.vbox(8, [l, go])))
+
+
+## Supply contracts: three side tasks with progress bars and CLAIM buttons.
+func _refresh_contracts() -> void:
+	# Contracts unlock after the first-chapter tutorial so new players see one thing at a time.
+	_contracts.visible = Game.chapter > 0 or Game.goal_index >= 8
+	if not _contracts.visible:
+		return
+	var sig := ""
+	for i in Game.contracts.size():
+		sig += "%s|%s;" % [Game.contracts[i].get("id", ""), Game.contract_claimable(i)]
+	if sig != _con_sig:
+		_con_sig = sig
+		UIKit.clear(_contracts)
+		_con_rows.clear()
+		var head := UIKit.label("SUPPLY CONTRACTS", "Small")
+		head.add_theme_color_override("font_color", UIKit.GOLD)
+		_contracts.add_child(head)
+		for i in Game.contracts.size():
+			var c: Dictionary = Game.contracts[i]
+			if c.get("id", "") == "":
+				var wait := UIKit.label("", "Small")
+				_contracts.add_child(UIKit.panel("Card", UIKit.hbox(10, [Icon.make("clock", 28, UIKit.MUTED), wait])))
+				_con_rows.append([null, wait, null])
+				continue
+			var d := Game.contract_def(c["id"])
+			var name := UIKit.label(Game.contract_text(c), "Value")
+			var bar := UIKit.bar(0.0, UIKit.TEAL, 8)
+			var prog := UIKit.label("", "Small")
+			var col := UIKit.vbox(2, [name, UIKit.hbox(8, [bar, prog]), UIKit.hbox(4, [UIKit.label("Reward", "Small"), UIKit.cost_row(c["reward"], 20)])])
+			col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			var row := UIKit.hbox(10, [Icon.make(d["icon"], 36), col])
+			var btn: Button = null
+			if Game.contract_claimable(i):
+				btn = UIKit.button("CLAIM", "GoldButton", "", 54)
+				btn.custom_minimum_size.x = 110
+				btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+				var idx := i
+				btn.pressed.connect(func():
+					if Game.claim_contract(idx):
+						Audio.play("collect"))
+				row.add_child(btn)
+			_contracts.add_child(UIKit.panel("CardGold" if btn else "Card", row))
+			_con_rows.append([bar, prog, btn])
+	for i in _con_rows.size():
+		var c: Dictionary = Game.contracts[i]
+		if c.get("id", "") == "":
+			_con_rows[i][1].text = "New contract in %s" % UIKit.fmt_time(c.get("ready_at", 0.0) - Game.stats["play_time"])
+		else:
+			var p := Game.contract_progress(c)
+			_con_rows[i][0].value = p[0] / maxf(1.0, p[1])
+			_con_rows[i][1].text = "%s / %s" % [UIKit.fmt(p[0]), UIKit.fmt(p[1])]
 
 
 class RouteView extends Control:

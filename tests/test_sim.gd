@@ -26,6 +26,7 @@ func _initialize() -> void:
 
 	# Offline: 8h with no food production must never go negative, must engage safe mode, nobody lost.
 	var pop: int = g.survivors.size()
+	g.achievements = Data.ACHIEVEMENTS.map(func(a): return a["id"]) # rewards may overflow storage on purpose
 	var r: Dictionary = g.run_offline(8 * 3600.0)
 	check(g.res["food"] >= 0.0 and g.res["water"] >= 0.0, "no negative food/water offline")
 	check(r["safe_mode"], "safe mode engaged when supplies ran out offline")
@@ -206,11 +207,43 @@ func _initialize() -> void:
 	check(g.chapter == 0 and g.chapter_done and g.res["data"] == 0.0 and g.survivors[0]["xp"] == 0.0, "v1 save migrates")
 	check(g.advance_chapter() and g.chapter == 1, "v1 save can depart for chapter 2")
 
+	# Contracts, achievements and overdrive.
+	g.new_game()
+	check(g.contracts.size() == 3 and g.contracts.all(func(c): return c["id"] != ""), "three contracts on a new game")
+	var ci: int = -1
+	for i in 3:
+		if g.contract_def(g.contracts[i]["id"])["stat"] == "salvaged":
+			ci = i
+	if ci < 0:
+		g.contracts[0] = {"id": "salvage", "n": 800.0, "start": g.stats["salvaged"], "reward": {"parts": 80}}
+		ci = 0
+	check(not g.contract_claimable(ci), "fresh contract not claimable")
+	g.stats["salvaged"] += 900.0
+	var parts0: float = g.res["parts"]
+	check(g.claim_contract(ci) and g.res["parts"] >= parts0 + 80.0, "claim contract pays out")
+	check(g.contracts[ci]["id"] == "", "claimed slot waits")
+	g._sim(Data.CONTRACT_COOLDOWN + 1.0)
+	check(g.contracts[ci]["id"] != "", "new contract after cooldown")
+	g.stats["salvaged"] = 10001.0
+	g._check_goals()
+	check(g.achievements.has("salv1"), "achievement unlocks from lifetime stats")
+	var bay2: Dictionary = g.first_of("dronebay")
+	var r0: float = g.rates()["scrap"]
+	check(g.boost(bay2["uid"]), "overdrive starts")
+	check(g.rates()["scrap"] > r0 * 1.9, "overdrive doubles output")
+	check(not g.boost(bay2["uid"]), "overdrive has a cooldown")
+	g._sim(Data.BOOST_TIME + 1.0)
+	check(g.boost_block_reason(bay2["uid"]) == "Cooling down", "overdrive cools down after use")
+	var dd: Dictionary = JSON.parse_string(JSON.stringify(g.to_dict()))
+	g.from_dict(dd)
+	check(g.achievements.has("salv1") and g.contracts.size() == 3 and g.first_of("dronebay")["boost_cd"] > 0.0, "contracts, achievements and cooldowns saved")
+
 	# Save round-trip.
 	var d: Dictionary = JSON.parse_string(JSON.stringify(g.to_dict()))
 	var before: int = g.carriages.size()
 	g.from_dict(d)
 	check(g.carriages.size() == before and typeof(g.carriages[0]["uid"]) == TYPE_INT, "save round-trip keeps carriages with int ids")
+	g.chapter = 1
 	g.research_done = ["rotors1"]
 	g.research_id = "drip1"
 	g.research_left = 99.0

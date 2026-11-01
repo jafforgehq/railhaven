@@ -94,9 +94,9 @@ func _stations() -> Array:
 		"recycler": return [44.0, 104.0, 160.0, 200.0]
 		"cooling": return [150.0, 196.0]
 		"dronebay": return [52.0, 116.0, 176.0]
-		"lab": return [44.0, 100.0, 152.0, 196.0, 72.0]
-		"medbay": return [56.0, 112.0, 168.0, 200.0]
-		"cargo": return [60.0, 150.0]
+		"lab": return [40.0, 100.0, 162.0, 204.0, 72.0]
+		"medbay": return [34.0, 80.0, 126.0, 188.0]
+		"cargo": return [46.0, 104.0, 132.0, 190.0]
 		"quarters": return [60.0, 120.0, 150.0, 190.0]
 		"locomotive": return [150.0]
 	return [100.0]
@@ -226,6 +226,10 @@ func _draw() -> void:
 		"workshop": glow(Vector2(103.5, -66), 20, Color(1, 0.7, 0.35), 0.22)
 		"cooling": _fx_cooling()
 		"dronebay": _fx_dronebay()
+	if uid != 0 and Game.carriage(uid).get("boost", 0.0) > 0.0:
+		# Overdrive: warm pulsing glow through the whole cabin.
+		var pulse := 0.5 + 0.5 * sin(t * 8.0)
+		glow(Vector2(W * 0.5, -80), 110, Color(1.0, 0.75, 0.3), 0.10 + 0.08 * pulse)
 	_draw_crew()
 	for sp in _sparks:
 		draw_circle(sp[0], 0.8, sp[3])
@@ -368,8 +372,7 @@ func _work_pose(w: Dictionary) -> String:
 	match type:
 		"workshop": return "hammer"
 		"greenhouse": return "tend"
-		"recycler", "cooling", "lab": return "panel"
-		"medbay": return "tend"
+		"recycler", "cooling", "lab", "medbay": return "panel"
 		"cargo": return "carry"
 		"dronebay": return "wrench"
 		"quarters":

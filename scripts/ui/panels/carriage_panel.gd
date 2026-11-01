@@ -27,6 +27,7 @@ var _benefit: Label
 var _cost_box: HBoxContainer
 var _upgrade: Button
 var _reason: Label
+var _boost: Button
 
 
 func build() -> void:
@@ -48,6 +49,16 @@ func build() -> void:
 	if _type == "dronebay":
 		_bar = UIKit.bar(0.0, UIKit.GOLD, 14)
 		box.add_child(_bar)
+	if Data.BOOSTABLE.has(_type):
+		_boost = UIKit.button("OVERDRIVE", "GoldButton", "up", 52)
+		_boost.size_flags_horizontal = Control.SIZE_SHRINK_END
+		_boost.pressed.connect(func():
+			if Game.boost(uid):
+				Audio.play("boost")
+				Audio.play("upgrade")
+			else:
+				Audio.play("error"))
+		box.get_child(0).add_child(_boost)
 	add_child(UIKit.panel("Card", box))
 
 	if _type == "lab":
@@ -151,6 +162,15 @@ func refresh() -> void:
 	_sub_text.text = s[1]
 	if _bar:
 		_bar.value = float(c["timer"]) / Game.drone_run_time() if c["active"] else 0.0
+	if _boost:
+		var lbl: Label = _boost.get_meta("label")
+		if c["boost"] > 0.0:
+			lbl.text = "x2 · %s" % UIKit.fmt_time(c["boost"])
+		elif c["boost_cd"] > 0.0:
+			lbl.text = UIKit.fmt_time(c["boost_cd"])
+		else:
+			lbl.text = "OVERDRIVE x2"
+		_boost.disabled = Game.boost_block_reason(uid) != ""
 	if _slots_row:
 		_refresh_slots(c)
 	var lv: int = c["level"]

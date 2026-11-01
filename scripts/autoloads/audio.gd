@@ -7,8 +7,12 @@ const EXTS := [".ogg", ".wav", ".mp3"]
 const SFX_VOLUME := {"ui_click": -6.0, "ui_open": -8.0, "collect": -4.0, "drone_launch": -8.0,
 	"drone_return": -4.0, "alarm": -6.0, "error": -6.0, "whistle": -8.0, "build": -3.0, "upgrade": -3.0}
 
+## Short taps on the phone's haptic motor for the moments that matter (ms).
+const HAPTIC := {"build": 30, "upgrade": 25, "goal_complete": 40, "error": 15, "alarm": 60, "whistle": 40, "boost": 35}
+
 var music_on := true
 var sfx_on := true
+var haptics_on := true
 
 var _music: AudioStreamPlayer
 var _ambience: Array[AudioStreamPlayer] = []
@@ -70,6 +74,8 @@ func _stream(name: String, loop := false) -> AudioStream:
 
 
 func play(name: String, pitch_jitter := 0.06) -> void:
+	if haptics_on and HAPTIC.has(name) and OS.has_feature("mobile"):
+		Input.vibrate_handheld(HAPTIC[name])
 	if not sfx_on:
 		return
 	var s := _stream(name)
@@ -117,6 +123,11 @@ func set_music(on: bool) -> void:
 	_save_settings()
 
 
+func set_haptics(on: bool) -> void:
+	haptics_on = on
+	_save_settings()
+
+
 func set_sfx(on: bool) -> void:
 	sfx_on = on
 	_apply()
@@ -139,11 +150,13 @@ func _load_settings() -> void:
 	if cfg.load(SETTINGS_PATH) == OK:
 		music_on = cfg.get_value("audio", "music", true)
 		sfx_on = cfg.get_value("audio", "sfx", true)
+		haptics_on = cfg.get_value("audio", "haptics", true)
 
 
 func _save_settings() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("audio", "music", music_on)
 	cfg.set_value("audio", "sfx", sfx_on)
+	cfg.set_value("audio", "haptics", haptics_on)
 	if cfg.save(SETTINGS_PATH) != OK:
 		push_error("Could not save settings")

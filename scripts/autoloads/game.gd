@@ -19,9 +19,13 @@ signal chapter_complete
 signal chapter_started(index: int)
 signal research_finished(id: String)
 signal crew_leveled(sid: int, level: int)
+signal carriage_boosted(uid: int)
+signal achievement_unlocked(id: String)
+signal contract_ready
 signal offline_report(report: Dictionary)
 
 const SAVE_PATH := "user://railhaven_save.json"
+const STAT_KEYS := ["salvaged", "parts_made", "food_made", "water_made", "upgrades", "events", "research", "boosts", "contracts", "play_time"]
 
 var res: Dictionary = {}
 var carriages: Array = [] # {uid, type, level, timer, active, repeat, acc}
@@ -37,7 +41,9 @@ var expedition := -1.0 # seconds left; < 0 means none running
 var research_done: Array = [] # ids
 var research_id := "" # project running now
 var research_left := -1.0
-var stats := {"salvaged": 0.0}
+var stats := {} # lifetime counters, see STAT_KEYS
+var contracts: Array = [] # 3 slots: {id, n, start, reward} or {id: "", ready_at}
+var achievements: Array = [] # unlocked ids
 var rationing := false
 var chapter_done := false # current chapter's landmark restored
 var chapter_seen := false
@@ -106,7 +112,13 @@ func new_game() -> void:
 	research_done = []
 	research_id = ""
 	research_left = -1.0
-	stats = {"salvaged": 0.0}
+	stats = {}
+	for k in STAT_KEYS:
+		stats[k] = 0.0
+	achievements = []
+	contracts = []
+	for i in 3:
+		contracts.append(_new_contract())
 	rationing = false
 	chapter_done = false
 	chapter_seen = false
@@ -122,7 +134,7 @@ func new_game() -> void:
 
 
 func _add_carriage(type: String) -> Dictionary:
-	var c := {"uid": next_uid, "type": type, "level": 1, "timer": 0.0, "active": true, "repeat": true, "acc": 0.0}
+	var c := {"uid": next_uid, "type": type, "level": 1, "timer": 0.0, "active": true, "repeat": true, "acc": 0.0, "boost": 0.0, "boost_cd": 0.0}
 	next_uid += 1
 	carriages.append(c)
 	return c
@@ -357,6 +369,8 @@ func _carriage_rate(c: Dictionary) -> float:
 	var r := worker_power(c) * Data.worker_rate(t, c["level"]) * output_mult(Data.CARRIAGES[t]["res"])
 	if t == "greenhouse" and event.get("id", "") == "ashstorm" and event.get("choice", "") == "b":
 		r *= 0.5
+	if c.get("boost", 0.0) > 0.0:
+		r *= Data.BOOST_MULT
 	return r
 
 
@@ -409,7 +423,7 @@ func rates() -> Dictionary:
 				r["scrap"] -= p * Data.SCRAP_PER_PART
 			"dronebay":
 				if (c["active"] or c["repeat"]) and not drones_grounded():
-					r["scrap"] += drone_yield(c) * eff * 60.0 / drone_run_time()
+					r["scrap"] += drone_yield(c) * eff * 60.0 / drone_run_time() * (Data.BOOST_MULT if c.get("boost", 0.0) > 0.0 else 1.0)
 	return r
 
 
@@ -420,7 +434,7 @@ func carriage_output(c: Dictionary) -> float:
 		"greenhouse", "workshop", "recycler", "lab":
 			return _carriage_rate(c) * eff * 60.0
 		"dronebay":
-			return drone_yield(c) * eff * 60.0 / drone_run_time()
+			return drone_yield(c) * eff * 60.0 / drone_run_time() * (Data.BOOST_MULT if c.get("boost", 0.0) > 0.0 else 1.0)
 	return 0.0
 
 
@@ -552,6 +566,7 @@ func upgrade(uid: int) -> bool:
 	var c := carriage(uid)
 	pay(upgrade_cost(c))
 	c["level"] += 1
+	stats["upgrades"] += 1
 	carriage_upgraded.emit(uid)
 	toast.emit("%s upgraded to Lv.%d" % [Data.CARRIAGES[c["type"]]["name"], c["level"]], "good")
 	_check_goals()
@@ -684,6 +699,120 @@ func start_expedition() -> bool:
 	return true
 
 
+# ---------------------------------------------------------------- overdrive
+
+func boost_block_reason(uid: int) -> String:
+	var c := carriage(uid)
+	if c.is_empty() or not Data.BOOSTABLE.has(c["type"]):
+		return "Cannot boost"
+	if c.get("boost", 0.0) > 0.0:
+		return "Running"
+	if c.get("boost_cd", 0.0) > 0.0:
+		return "Cooling down"
+	return ""
+
+
+func boost(uid: int) -> bool:
+	if boost_block_reason(uid) != "":
+		return false
+	var c := carriage(uid)
+	c["boost"] = Data.BOOST_TIME
+	c["boost_cd"] = Data.BOOST_COOLDOWN
+	stats["boosts"] += 1
+	carriage_boosted.emit(uid)
+	changed.emit()
+	return true
+
+
+# ---------------------------------------------------------------- contracts & achievements
+
+func stat_value(key: String) -> float:
+	match key:
+		"survivors": return survivors.size()
+		"crew_level": return best_crew_level()
+		"max_level":
+			var m := 0
+			for c in carriages:
+				m = maxi(m, c["level"])
+			return m
+		"carriages": return carriages.size() - 1
+		"landmarks": return chapter + (1 if chapter_done else 0)
+	return stats.get(key, 0.0)
+
+
+func contract_def(id: String) -> Dictionary:
+	for d in Data.CONTRACTS:
+		if d["id"] == id:
+			return d
+	return {}
+
+
+func _new_contract() -> Dictionary:
+	var active := contracts.map(func(c): return c.get("id", ""))
+	var pool := Data.CONTRACTS.filter(func(d): return d.get("chapter", 0) <= chapter and not active.has(d["id"]))
+	var d: Dictionary = pool.pick_random()
+	var s: float = Data.CONTRACT_SCALE[chapter]
+	var n: float = d["n"] if d.get("fixed", false) else round(d["n"] * s / 10.0) * 10.0
+	return {"id": d["id"], "n": n, "start": stats.get(d["stat"], 0.0), "reward": Data.scaled_cost(d["reward"], s)}
+
+
+func contract_text(c: Dictionary) -> String:
+	var d := contract_def(c["id"])
+	return d["text"] % UIKit.fmt(c["n"])
+
+
+## [done so far, target] for a contract slot.
+func contract_progress(c: Dictionary) -> Array:
+	var d := contract_def(c["id"])
+	return [minf(stats.get(d["stat"], 0.0) - c["start"], c["n"]), c["n"]]
+
+
+func contract_claimable(i: int) -> bool:
+	var c: Dictionary = contracts[i]
+	if c.get("id", "") == "":
+		return false
+	var p := contract_progress(c)
+	return p[0] >= p[1]
+
+
+func any_contract_claimable() -> bool:
+	for i in contracts.size():
+		if contract_claimable(i):
+			return true
+	return false
+
+
+func claim_contract(i: int) -> bool:
+	if not contract_claimable(i):
+		return false
+	var c: Dictionary = contracts[i]
+	grant(c["reward"])
+	stats["contracts"] += 1
+	toast.emit("Contract complete: +%s" % Data.cost_text(c["reward"]), "good")
+	contracts[i] = {"id": "", "ready_at": stats["play_time"] + Data.CONTRACT_COOLDOWN}
+	changed.emit()
+	return true
+
+
+func _tick_contracts() -> void:
+	for i in contracts.size():
+		if contracts[i].get("id", "") == "" and stats["play_time"] >= contracts[i].get("ready_at", 0.0):
+			contracts[i] = _new_contract()
+			if not _offline:
+				contract_ready.emit()
+
+
+func _check_achievements() -> void:
+	for a in Data.ACHIEVEMENTS:
+		if achievements.has(a["id"]) or stat_value(a["stat"]) < a["n"]:
+			continue
+		achievements.append(a["id"])
+		grant(a["reward"])
+		if not _offline:
+			toast.emit("Achievement: %s (+%s)" % [a["name"], Data.cost_text(a["reward"])], "good")
+			achievement_unlocked.emit(a["id"])
+
+
 # ---------------------------------------------------------------- research
 
 func research_def(id: String) -> Dictionary:
@@ -736,6 +865,7 @@ func start_research(id: String) -> bool:
 func _finish_research() -> void:
 	var r := research_def(research_id)
 	research_done.append(research_id)
+	stats["research"] += 1
 	research_id = ""
 	research_left = -1.0
 	_recalc_bonus()
@@ -771,6 +901,7 @@ func choose_event(choice: String) -> bool:
 		return false
 	if not pay(event_cost(event["id"], choice)):
 		return false
+	stats["events"] += 1
 	_apply_choice(choice)
 	return true
 
@@ -835,11 +966,15 @@ func _sim(dt: float) -> void:
 	var up := n * dt * upkeep_mult()
 	res["food"] = maxf(0.0, res["food"] - up * Data.FOOD_PER_SURVIVOR)
 	res["water"] = maxf(0.0, res["water"] - up * Data.WATER_PER_SURVIVOR)
+	stats["play_time"] += dt
 	for c in carriages:
 		match c["type"]:
 			"greenhouse", "recycler", "lab":
 				var k: String = Data.CARRIAGES[c["type"]]["res"]
-				c["acc"] += gain(k, _carriage_rate(c) * eff * dt, cap[k])
+				var got := gain(k, _carriage_rate(c) * eff * dt, cap[k])
+				c["acc"] += got
+				if k != "data":
+					stats[k + "_made"] += got
 			"workshop":
 				var want := _carriage_rate(c) * eff * dt
 				var made := minf(want, minf(res["scrap"] / Data.SCRAP_PER_PART, cap["parts"] - res["parts"]))
@@ -847,8 +982,14 @@ func _sim(dt: float) -> void:
 					res["scrap"] -= made * Data.SCRAP_PER_PART
 					res["parts"] += made
 					c["acc"] += made
+					stats["parts_made"] += made
 			"dronebay":
 				_drone_tick(c, dt, eff, cap["scrap"])
+		if c["boost"] > 0.0:
+			c["boost"] = maxf(0.0, c["boost"] - dt)
+		if c["boost_cd"] > 0.0:
+			c["boost_cd"] = maxf(0.0, c["boost_cd"] - dt)
+	_tick_contracts()
 
 	# Crew learn on the job.
 	var xp := dt * (1.0 + bonus("xp"))
@@ -903,7 +1044,7 @@ func _sim(dt: float) -> void:
 func _drone_tick(c: Dictionary, dt: float, eff: float, scrap_cap: float) -> void:
 	if not c["active"] or drones_grounded():
 		return
-	c["timer"] += dt
+	c["timer"] += dt * (Data.BOOST_MULT if c["boost"] > 0.0 else 1.0)
 	var run := drone_run_time()
 	while c["timer"] >= run:
 		var haul := drone_yield(c) * eff
@@ -1037,6 +1178,7 @@ func goal_build_type() -> String:
 
 
 func _check_goals() -> void:
+	_check_achievements()
 	var gl := goals()
 	while goal_index < gl.size():
 		var g: Dictionary = gl[goal_index]
@@ -1060,6 +1202,7 @@ func to_dict() -> Dictionary:
 		"growth_timer": growth_timer, "chapter": chapter, "distance": distance,
 		"goal_index": goal_index, "tower_stage": tower_stage, "expedition": expedition,
 		"research_done": research_done, "research_id": research_id, "research_left": research_left,
+		"contracts": contracts, "achievements": achievements,
 		"stats": stats, "rationing": rationing,
 		"chapter_done": chapter_done, "chapter_seen": chapter_seen, "intro_seen": intro_seen,
 		"event_timer": event_timer,
@@ -1110,6 +1253,7 @@ func from_dict(d: Dictionary) -> void:
 			"uid": int(c["uid"]), "type": str(c["type"]), "level": clampi(int(c["level"]), 1, Data.MAX_LEVEL),
 			"timer": float(c.get("timer", 0.0)), "active": bool(c.get("active", true)),
 			"repeat": bool(c.get("repeat", true)), "acc": 0.0,
+			"boost": float(c.get("boost", 0.0)), "boost_cd": float(c.get("boost_cd", 0.0)),
 		})
 	survivors = []
 	for s in d["survivors"]:
@@ -1138,7 +1282,26 @@ func from_dict(d: Dictionary) -> void:
 	if research_def(research_id).is_empty():
 		research_id = ""
 		research_left = -1.0
-	stats = {"salvaged": float(d.get("stats", {}).get("salvaged", 0.0))}
+	stats = {}
+	var ds: Dictionary = d.get("stats", {})
+	for k in STAT_KEYS:
+		stats[k] = float(ds.get(k, 0.0))
+	if not ds.has("research"):
+		stats["research"] = research_done.size()
+	achievements = []
+	for id in d.get("achievements", []):
+		achievements.append(str(id))
+	contracts = []
+	for c in d.get("contracts", []):
+		if str(c.get("id", "")) == "":
+			contracts.append({"id": "", "ready_at": float(c.get("ready_at", 0.0))})
+		elif not contract_def(str(c["id"])).is_empty():
+			var rw := {}
+			for k in c.get("reward", {}):
+				rw[str(k)] = int(c["reward"][k])
+			contracts.append({"id": str(c["id"]), "n": float(c.get("n", 1.0)), "start": float(c.get("start", 0.0)), "reward": rw})
+	while contracts.size() < 3:
+		contracts.append(_new_contract())
 	rationing = bool(d.get("rationing", false))
 	chapter_done = bool(d.get("chapter_done", false))
 	chapter_seen = bool(d.get("chapter_seen", false))

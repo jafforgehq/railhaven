@@ -55,6 +55,7 @@ func _ready() -> void:
 	Game.chapter_started.connect(_on_chapter_started)
 	Game.research_finished.connect(func(_id): Audio.play("goal_complete"); _refresh_panel(true))
 	Game.crew_leveled.connect(func(_s, _l): Audio.play("upgrade"))
+	Game.achievement_unlocked.connect(func(_id): Audio.play("goal_complete"))
 	Game.offline_report.connect(_on_offline_report)
 	Game.carriage_built.connect(func(_u): _rebuild_plates(); _refresh_panel(true))
 	Game.carriage_upgraded.connect(func(_u): _refresh_panel(true))
@@ -251,7 +252,7 @@ func _on_changed() -> void:
 	for c in Game.carriages:
 		open_slots += maxi(0, Game.free_slots(c["uid"]))
 	_tab_buttons["crew"].get_meta("dot").visible = idle > 0 and open_slots > 0
-	_tab_buttons["journey"].get_meta("dot").visible = Game.stage_block_reason() == ""
+	_tab_buttons["journey"].get_meta("dot").visible = Game.stage_block_reason() == "" or (Game.any_contract_claimable() and (Game.chapter > 0 or Game.goal_index >= 8)) or (Game.chapter_done and not Game.is_last_chapter())
 	for m in _modal_stack:
 		if m.has_method("refresh"):
 			m.refresh()

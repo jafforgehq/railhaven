@@ -188,12 +188,15 @@ static func settings(main: Node) -> void:
 	sfx.text = "Sound effects & ambience"
 	sfx.button_pressed = Audio.sfx_on
 	sfx.toggled.connect(func(on): Audio.set_sfx(on))
-	for c in [music, sfx]:
+	var buzz := CheckButton.new()
+	buzz.text = "Vibration"
+	buzz.button_pressed = Audio.haptics_on
+	buzz.toggled.connect(func(on): Audio.set_haptics(on))
+	for c in [music, sfx, buzz]:
 		c.focus_mode = Control.FOCUS_NONE
 		c.add_theme_font_size_override("font_size", 26)
-	v.add_child(UIKit.panel("Card", UIKit.vbox(6, [UIKit.hbox(10, [Icon.make("music", 28, UIKit.TEAL), music]), UIKit.hbox(10, [Icon.make("sound", 28, UIKit.TEAL), sfx])])))
-	music.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sfx.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_child(UIKit.panel("Card", UIKit.vbox(6, [UIKit.hbox(10, [Icon.make("music", 28, UIKit.TEAL), music]), UIKit.hbox(10, [Icon.make("sound", 28, UIKit.TEAL), sfx]), UIKit.hbox(10, [Icon.make("bulb", 28, UIKit.TEAL), buzz])])))
 	var credits := UIKit.wrap_label("Railhaven: Scorched Line · first playable. Music: \"Lone Scavenger\" by vitalezzz (CC0). Fanfare: \"Smooth Guitar Fanfare\" by OwlishMedia (CC BY 4.0). Wind: \"Wind Loop\" by AntumDeluge from InspectorJ (CC BY 3.0). SFX: Kenney, Wikimedia Commons and OpenGameArt contributors (CC0). Font: Barlow Condensed (OFL). Full list in assets/audio/CREDITS.md.", "Small")
 	v.add_child(credits)
 	var how := UIKit.button("HOW TO PLAY", "", "bulb", 58)
@@ -291,6 +294,34 @@ static func goals(main: Node) -> void:
 		var reward := Data.cost_text(g["reward"])
 		var row := UIKit.hbox(10, [Icon.make("check" if done else ("star" if cur else "lock"), 24, UIKit.GREEN if done else (UIKit.GOLD if cur else UIKit.MUTED)), l, UIKit.label(reward, "Small"), right])
 		v.add_child(UIKit.panel("CardGold" if cur else "Card", row))
+	var close := UIKit.button("CLOSE", "TealButton", "", 58)
+	v.add_child(close)
+	var panel := _wrap(main, v)
+	close.pressed.connect(func(): main.close_modal_of(panel))
+
+
+# ---------------------------------------------------------------- achievements
+
+static func achievements(main: Node) -> void:
+	var v := _modal_box(620)
+	v.add_child(_title("ACHIEVEMENTS", "%d of %d unlocked" % [Game.achievements.size(), Data.ACHIEVEMENTS.size()]))
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size.y = clampf(main.get_viewport_rect().size.y - 520.0, 420.0, 900.0)
+	var list := UIKit.vbox(8)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(list)
+	v.add_child(scroll)
+	for a in Data.ACHIEVEMENTS:
+		var done: bool = Game.achievements.has(a["id"])
+		var name := UIKit.label(a["name"], "Value")
+		name.add_theme_color_override("font_color", UIKit.GOLD if done else UIKit.TEXT)
+		var cur := Game.stat_value(a["stat"])
+		var info := UIKit.label(a["text"] + ("" if done else "  (%s / %s)" % [UIKit.fmt(minf(cur, a["n"])), UIKit.fmt(a["n"])]), "Small")
+		var col := UIKit.vbox(0, [name, info])
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var row := UIKit.hbox(10, [Icon.make("trophy" if done else "lock", 36, UIKit.GOLD if done else UIKit.MUTED), col, UIKit.cost_row(a["reward"], 20)])
+		list.add_child(UIKit.panel("CardGold" if done else "Card", row))
 	var close := UIKit.button("CLOSE", "TealButton", "", 58)
 	v.add_child(close)
 	var panel := _wrap(main, v)

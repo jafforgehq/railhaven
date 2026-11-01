@@ -17,8 +17,12 @@
   "grower_b",
   "mechanic_a",
   "mechanic_b",
+  "medic_a",
+  "medic_b",
   "pilot_a",
   "pilot_b",
+  "scientist_a",
+  "scientist_b",
   "technician_a",
   "technician_b"
  ],

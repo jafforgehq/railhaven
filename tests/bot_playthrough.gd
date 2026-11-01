@@ -1,6 +1,6 @@
 extends SceneTree
 ## Greedy bot plays the whole journey headless to check pacing and that it is completable.
-## godot --headless --path . -s tests/bot_playthrough.gd [-- quiet]
+## godot --headless --path . -s tests/bot_playthrough.gd [-- quiet] [passive]
 ## Reports time per chapter and the longest "wall" (stretch with nothing to buy, build,
 ## research or launch) so dead waits show up in numbers.
 
@@ -81,6 +81,21 @@ func _did() -> void:
 
 func _act() -> void:
 	g.auto_assign()
+	# Plays like an active player (claims contracts, taps Overdrive) for a worst-case pace;
+	# "-- passive" skips both, like a player who only builds and upgrades.
+	if not OS.get_cmdline_user_args().has("passive"):
+		_active()
+	_act_core()
+
+
+func _active() -> void:
+	for i in g.contracts.size():
+		g.claim_contract(i)
+	for c in g.carriages:
+		g.boost(c["uid"])
+
+
+func _act_core() -> void:
 	if g.chapter_done and g.advance_chapter():
 		_did()
 		return

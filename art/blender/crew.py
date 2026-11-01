@@ -34,6 +34,8 @@ ROLES = {
     "Mechanic":   {"shirt": "4f86b0", "sleeve": "4f86b0", "pants": "3c6688", "extra": "coverall", "accent": "2f5878", "rolled": False},
     "Pilot":      {"shirt": "d9772e", "sleeve": "d9772e", "pants": "b8622a", "extra": "jumpsuit", "accent": "f0d060", "rolled": False},
     "Technician": {"shirt": "e8dcc4", "sleeve": "e8dcc4", "pants": "3d3a48", "extra": "vest", "accent": "2f9a90", "rolled": True},
+    "Scientist":  {"shirt": "2f9a90", "sleeve": "eef0ec", "pants": "3d3a48", "extra": "labcoat", "accent": "eef0ec", "rolled": False},
+    "Medic":      {"shirt": "4fb3a8", "sleeve": "4fb3a8", "pants": "3f9e94", "extra": "scrubs", "accent": "d83a32", "rolled": True},
 }
 # Two looks per role; survivors map onto these in Godot.
 PRESETS = {
@@ -47,6 +49,10 @@ PRESETS = {
     "pilot_b":      ("Pilot", 3, 0, "short", "cap"),
     "technician_a": ("Technician", 0, 2, "bun", "none"),
     "technician_b": ("Technician", 2, 1, "short", "cap"),
+    "scientist_a":  ("Scientist", 0, 5, "short", "glasses"),
+    "scientist_b":  ("Scientist", 3, 4, "bun", "goggles"),
+    "medic_a":      ("Medic", 1, 2, "ponytail", "cap"),
+    "medic_b":      ("Medic", 2, 0, "short", "glasses"),
 }
 ANIMS = {  # name: frame count
     "idle": 6, "walk": 8, "carry": 8, "hammer": 8, "tend": 8, "panel": 6, "wrench": 6, "sit": 6,
@@ -274,9 +280,10 @@ class Crew:
 
         # Torso + outfit.
         rbox("torso", (0.17, 0.25, 0.29), shirt, self.spine, (0, 0, 0.135), bevel=0.06)
-        torus("belt", 0.105, 0.022, toon("3a2a20"), self.spine, (0, 0, 0.015), scale=(0.88, 1.22, 1), outline=True)
-        rbox("buckle", (0.02, 0.05, 0.035), toon("d8b060", 0.7, 1.3), self.spine, (0.098, 0, 0.015), bevel=0.006, outline=False)
         ex = r["extra"]
+        if ex not in ("labcoat", "scrubs"):  # coat covers the belt; scrubs have none
+            torus("belt", 0.105, 0.022, toon("3a2a20"), self.spine, (0, 0, 0.015), scale=(0.88, 1.22, 1), outline=True)
+            rbox("buckle", (0.02, 0.05, 0.035), toon("d8b060", 0.7, 1.3), self.spine, (0.098, 0, 0.015), bevel=0.006, outline=False)
         if ex == "apron":
             rbox("apron", (0.02, 0.2, 0.33), accent, self.spine, (0.095, 0, 0.05), bevel=0.008)
             rbox("strap", (0.012, 0.03, 0.12), toon(shade(r["accent"], 0.8)), self.spine, (0.088, 0, 0.24), rot=(0.5, 0, 0), bevel=0.004, outline=False)
@@ -294,6 +301,22 @@ class Crew:
         elif ex == "vest":
             rbox("vest", (0.19, 0.27, 0.22), accent, self.spine, (0.0, 0, 0.15), bevel=0.05)
             torus("stripe", 0.103, 0.014, toon("e6f2a0", 0.8, 1.15), self.spine, (0, 0, 0.12), scale=(0.95, 1.35, 1))
+        elif ex == "labcoat":  # open white coat over the shirt, hem past the hips
+            rbox("coat", (0.186, 0.27, 0.35), accent, self.spine, (0, 0, 0.1), bevel=0.06)
+            rbox("shirt_v", (0.02, 0.07, 0.13), shirt, self.spine, (0.094, 0, 0.2), bevel=0.008, outline=False)
+            for y, a in ((-0.036, 0.3), (0.036, -0.3)):
+                rbox("lapel", (0.016, 0.03, 0.15), toon(shade(r["accent"], 0.92)), self.spine, (0.099, y, 0.19), rot=(a, 0, 0), bevel=0.006, outline=False)
+            rbox("coat_pocket", (0.014, 0.06, 0.05), toon(shade(r["accent"], 0.9)), self.spine, (0.096, -0.07, 0.02), bevel=0.006, outline=False)
+            rbox("pen", (0.008, 0.008, 0.045), toon("2a5ad0"), self.spine, (0.1, -0.075, 0.2), bevel=0.002, outline=False)
+        elif ex == "scrubs":  # V-neck, red-cross chest patch and armband
+            rbox("vneck", (0.012, 0.05, 0.05), toon(SKIN[skin]), self.spine, (0.088, 0, 0.262), rot=(math.pi / 4, 0, 0), bevel=0.004, outline=False)
+            rbox("patch", (0.012, 0.06, 0.06), toon("f4f4f0"), self.spine, (0.092, -0.055, 0.18), bevel=0.008)
+            rbox("patch_v", (0.006, 0.014, 0.042), accent, self.spine, (0.1, -0.055, 0.18), bevel=0.0, outline=False)
+            rbox("patch_h", (0.006, 0.042, 0.014), accent, self.spine, (0.1, -0.055, 0.18), bevel=0.0, outline=False)
+            sh = self.joints["shoulderF"]
+            torus("armband", 0.049, 0.013, toon("f4f4f0"), sh, (0, 0, -0.06), outline=True)
+            rbox("arm_cross_v", (0.012, 0.006, 0.026), accent, sh, (0, -0.062, -0.06), bevel=0.0, outline=False)
+            rbox("arm_cross_h", (0.026, 0.006, 0.012), accent, sh, (0, -0.062, -0.06), bevel=0.0, outline=False)
 
         # Head.
         self.head = empty("head", self.neck, (0, 0, 0.0))
@@ -319,12 +342,21 @@ class Crew:
         sphere("nose", 0.02, skin_m, self.head, hc + on_head(-0.05, -0.18, R * 0.99), outline=False)
         sphere("mouth", 0.016, toon("5a2018", 1.0, 1.0), self.head, hc + on_head(-0.12, -0.4, R * 0.97), (0.35, 1.1, 0.4), rot=(0, 0.45, -0.12), outline=False)
         if hat == "cap":
-            cap_col = "4f7a32" if role == "Grower" else "6e5a3c"
+            cap_col = {"Grower": "4f7a32", "Medic": "3f9e94"}.get(role, "6e5a3c")
             bm = bmesh.new()
             bmesh.ops.create_uvsphere(bm, u_segments=40, v_segments=20, radius=R * 1.12)
             _cut(bm, (0, 0, R * 0.25), (0, 0, -1))
             _finish("cap", bm, toon(cap_col), self.head, hc + Vector((-0.005, 0, 0.005)), (0, 0, 0), (1, 1, 1))
-            cylinder("brim", 0.11, 0.016, toon(shade(cap_col, 0.85)), self.head, hc + Vector((0.13, 0, 0.055)), rot=(0, -0.18, 0))
+            if role != "Medic":  # medics wear a brimless scrub cap
+                cylinder("brim", 0.11, 0.016, toon(shade(cap_col, 0.85)), self.head, hc + Vector((0.13, 0, 0.055)), rot=(0, -0.18, 0))
+        elif hat == "glasses":
+            frame = toon("3a2a2a", 0.7, 1.3)
+            for az in (-0.42, 0.42):
+                torus("glasses", 0.036, 0.0065, frame, self.head, hc + on_head(az, -0.02, R * 1.03), rot=(0, math.pi / 2, az), outline=False)
+            a, b = hc + on_head(-0.2, -0.0, R * 1.04), hc + on_head(0.2, -0.0, R * 1.04)
+            cylinder("bridge", 0.005, (b - a).length, frame, self.head, (a + b) / 2, rot=(b - a).to_track_quat("Z", "Y").to_euler(), outline=False)
+            a, b = hc + on_head(-0.64, 0.0, R * 1.02), hc + Vector((-0.04, -0.158, 0.01))
+            cylinder("temple", 0.005, (b - a).length, frame, self.head, (a + b) / 2, rot=(b - a).to_track_quat("Z", "Y").to_euler(), outline=False)
         elif hat == "goggles":
             torus("strap", R * 1.06, 0.016, toon("3a3230"), self.head, hc + Vector((0, 0, 0.06)), rot=(0, -0.25, 0), outline=False)
             for az in (-0.4, 0.4):
@@ -486,7 +518,8 @@ def build_preset(name):
             o.hide_render = True
     crew.root.rotation_euler = (0, -math.pi / 2, 0)
     crew.root.location = (0.42, 0.0, 0.12)
-    blanket_col = {"Engineer": "4f7f8a", "Grower": "6f8a4a", "Mechanic": "5a6a9a", "Pilot": "8a5a4a", "Technician": "3f7a74"}[role]
+    blanket_col = {"Engineer": "4f7f8a", "Grower": "6f8a4a", "Mechanic": "5a6a9a", "Pilot": "8a5a4a", "Technician": "3f7a74",
+                   "Scientist": "6f6a9a", "Medic": "8aa4ae"}[role]
     blanket = rbox("blanket", (0.66, 0.36, 0.2), toon(blanket_col), None, (-0.08, -0.02, 0.18), bevel=0.07)
     rbox("fold", (0.08, 0.37, 0.205), toon(shade(blanket_col, 1.2)), None, (-0.37, -0.02, 0.185), bevel=0.04)
     frame_camera(sc, cam, SLEEP_W, SLEEP_H, 0.62, (0.0, 0.27))

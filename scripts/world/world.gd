@@ -67,6 +67,7 @@ func _ready() -> void:
 	Game.carriage_built.connect(_on_built)
 	Game.carriage_upgraded.connect(_on_upgraded)
 	Game.drone_returned.connect(_on_drone_returned)
+	Game.carriage_boosted.connect(_on_boosted)
 	Game.chapter_complete.connect(func(): _set_cool())
 	_apply_region()
 	_set_cool()
@@ -272,6 +273,16 @@ func _on_upgraded(uid: int) -> void:
 		for k in 6:
 			v.spark(Vector2(randf_range(20, CarriageView.W - 20), randf_range(-110, -40)), 6, Color("7ff0e0"))
 	Audio.play("upgrade")
+
+
+func _on_boosted(uid: int) -> void:
+	var v: CarriageView = views.get(uid)
+	if v == null:
+		return
+	v.flash = 0.7
+	for k in 10:
+		v.spark(Vector2(randf_range(20, CarriageView.W - 20), randf_range(-110, -40)), 6, Color("ffd27a"))
+	float_text.emit(v.position + Vector2(90, -160), "OVERDRIVE x2", Color("ffd27a"))
 
 
 func _on_drone_returned(uid: int, amount: float) -> void:

@@ -128,7 +128,7 @@ const CHAPTERS := [
 	},
 	{
 		"region": "Ash Coast", "scenery": "coast", "landmark": "desal", "landmark_name": "Desalination Works",
-		"temp": 62, "distance": 420.0, "level_cap": 6, "train": 12, "perk": {"water": 1.25},
+		"temp": 62, "distance": 520.0, "level_cap": 6, "train": 12, "perk": {"water": 1.25},
 		"perk_text": "Sea air: +25% water", "ground": [0.85, Color("e4d8ec")],
 		"desc": "A dead plant on a grey sea. Running again, it would turn the whole coast into a water source.",
 		"done_text": "Fresh water pours from the works for the first time in decades. Beyond the coast, the Glass Flats glitter in the heat.",
@@ -138,16 +138,16 @@ const CHAPTERS := [
 			{"text": "Staff the Research Lab", "kind": "assign", "arg": "lab", "n": 1, "reward": {"data": 20}},
 			{"text": "Finish your first research", "kind": "research", "n": 1, "reward": {"parts": 120}},
 			{"text": "Upgrade the Water Recycler to Lv.4", "kind": "level", "arg": "recycler", "n": 4, "reward": {"water": 150}},
-			{"text": "Reach the Desalination Works", "kind": "distance", "n": 420, "reward": {"scrap": 400}},
+			{"text": "Reach the Desalination Works", "kind": "distance", "n": 520, "reward": {"scrap": 400}},
 			{"text": "Shelter 22 survivors", "kind": "survivors", "n": 22, "reward": {"parts": 200}},
 			{"text": "Restore the Desalination Works", "kind": "tower", "n": 3, "reward": {}},
 		],
 		"stages": [
-			{"name": "Clear the intake pipes", "cost": {"parts": 350, "scrap": 700}, "time": 300.0,
+			{"name": "Clear the intake pipes", "cost": {"parts": 550, "scrap": 1100}, "time": 600.0,
 				"req": {"dronebay": 4}, "desc": "Drones cut away decades of ash and salt from the sea intakes."},
-			{"name": "Rebuild the pump hall", "cost": {"parts": 700, "water": 250}, "time": 600.0,
+			{"name": "Rebuild the pump hall", "cost": {"parts": 1100, "water": 400}, "time": 900.0,
 				"req": {"workshop": 5, "lab": 2}, "desc": "Prime the pumps with your own water while the drones refit them."},
-			{"name": "Restart the boilers", "cost": {"parts": 1200, "water": 400, "data": 120}, "time": 900.0,
+			{"name": "Restart the boilers", "cost": {"parts": 1900, "water": 650, "data": 200}, "time": 1200.0,
 				"req": {"recycler": 5, "cooling": 3}, "desc": "Your scientists tune the boilers remotely as the drones fire them up."},
 		],
 	},
@@ -169,19 +169,19 @@ const CHAPTERS := [
 			{"text": "Restore the Mirror Array", "kind": "tower", "n": 4, "reward": {}},
 		],
 		"stages": [
-			{"name": "Polish the heliostats", "cost": {"parts": 2050, "water": 700}, "time": 900.0,
+			{"name": "Polish the heliostats", "cost": {"parts": 2050, "water": 700}, "time": 1200.0,
 				"req": {"dronebay": 6}, "desc": "Drones scrub sand-blasted mirrors one by one."},
-			{"name": "Realign the mirror field", "cost": {"parts": 3450, "data": 350}, "time": 1500.0,
+			{"name": "Realign the mirror field", "cost": {"parts": 3450, "data": 350}, "time": 1800.0,
 				"req": {"lab": 4}, "desc": "Your scientists compute a new aim for every mirror."},
-			{"name": "Rewire the receiver", "cost": {"parts": 5200, "scrap": 10350}, "time": 2100.0,
+			{"name": "Rewire the receiver", "cost": {"parts": 5200, "scrap": 10350}, "time": 2400.0,
 				"req": {"workshop": 7, "medbay": 2}, "desc": "Heat-proof crews guide the drones through the glare."},
-			{"name": "Ignite the power tower", "cost": {"parts": 6900, "water": 2300, "data": 700}, "time": 2700.0,
+			{"name": "Ignite the power tower", "cost": {"parts": 6900, "water": 2300, "data": 700}, "time": 3000.0,
 				"req": {"cooling": 6, "survivors": 34}, "desc": "Everyone on board watches the receiver light up."},
 		],
 	},
 	{
 		"region": "Drowned City", "scenery": "city", "landmark": "archive", "landmark_name": "Seed Archive",
-		"temp": 64, "distance": 1150.0, "level_cap": 8, "train": 17, "perk": {"scrap": 1.3},
+		"temp": 64, "distance": 1300.0, "level_cap": 8, "train": 17, "perk": {"scrap": 1.3},
 		"perk_text": "Endless ruins: +30% scrap", "ground": [0.45, Color("d4bcbc")],
 		"desc": "A sealed vault under a flooded city. Inside: seeds for every crop that ever grew here.",
 		"done_text": "The vault doors grind open. Thousands of seed packets, still dry. Somewhere ahead, the highlands are waiting for them.",
@@ -191,24 +191,24 @@ const CHAPTERS := [
 			{"text": "Upgrade the Greenhouse to Lv.8", "kind": "level", "arg": "greenhouse", "n": 8, "reward": {"food": 1500}},
 			{"text": "Finish 15 research projects", "kind": "research", "n": 15, "reward": {"data": 300}},
 			{"text": "Train a worker to Lv.8", "kind": "crew_level", "n": 8, "reward": {"water": 1500}},
-			{"text": "Reach the Seed Archive", "kind": "distance", "n": 1150, "reward": {"scrap": 6000}},
+			{"text": "Reach the Seed Archive", "kind": "distance", "n": 1300, "reward": {"scrap": 6000}},
 			{"text": "Shelter 50 survivors", "kind": "survivors", "n": 50, "reward": {"parts": 2500}},
 			{"text": "Restore the Seed Archive", "kind": "tower", "n": 4, "reward": {}},
 		],
 		"stages": [
-			{"name": "Pump out the tunnels", "cost": {"parts": 10350, "water": 3450}, "time": 1800.0,
+			{"name": "Pump out the tunnels", "cost": {"parts": 12400, "water": 4150}, "time": 2400.0,
 				"req": {"recycler": 7}, "desc": "Drones haul pumps into the flooded access tunnels."},
-			{"name": "Shore up the vault", "cost": {"parts": 16100, "scrap": 28750}, "time": 2700.0,
+			{"name": "Shore up the vault", "cost": {"parts": 19300, "scrap": 34500}, "time": 3300.0,
 				"req": {"workshop": 8, "dronebay": 8}, "desc": "Steel braces go in before the old concrete gives way."},
-			{"name": "Crack the seal codes", "cost": {"parts": 20700, "data": 1700}, "time": 3600.0,
+			{"name": "Crack the seal codes", "cost": {"parts": 24850, "data": 2050}, "time": 4200.0,
 				"req": {"lab": 7}, "desc": "Scientists brute-force a lock built to last a thousand years."},
-			{"name": "Recover the seed bank", "cost": {"parts": 27600, "food": 6900, "water": 6900}, "time": 4500.0,
+			{"name": "Recover the seed bank", "cost": {"parts": 33100, "food": 8300, "water": 8300}, "time": 5100.0,
 				"req": {"greenhouse": 8, "survivors": 52}, "desc": "Every drone you own carries seeds home in cool boxes."},
 		],
 	},
 	{
 		"region": "Green Highlands", "scenery": "highland", "landmark": "haven", "landmark_name": "Haven",
-		"temp": 60, "distance": 1650.0, "level_cap": 10, "train": 20, "perk": {"food": 1.3},
+		"temp": 60, "distance": 1900.0, "level_cap": 10, "train": 20, "perk": {"food": 1.3},
 		"perk_text": "Living soil: +30% food", "ground": [0.55, Color("dce4b0")],
 		"desc": "The coolest place left on the line. Here the colony can finally step off the train and build a home.",
 		"done_text": "Haven is founded. For the first time since the heat came, children sleep in houses that do not move. The line goes on, and so does Railhaven.",
@@ -217,7 +217,7 @@ const CHAPTERS := [
 			{"text": "Upgrade the Research Lab to Lv.10", "kind": "level", "arg": "lab", "n": 10, "reward": {"data": 800}},
 			{"text": "Finish 21 research projects", "kind": "research", "n": 21, "reward": {"parts": 8000}},
 			{"text": "Train a worker to Lv.10", "kind": "crew_level", "n": 10, "reward": {"water": 5000}},
-			{"text": "Reach Haven", "kind": "distance", "n": 1650, "reward": {"scrap": 20000}},
+			{"text": "Reach Haven", "kind": "distance", "n": 1900, "reward": {"scrap": 20000}},
 			{"text": "Shelter 70 survivors", "kind": "survivors", "n": 70, "reward": {"parts": 10000}},
 			{"text": "Upgrade any carriage to Lv.10", "kind": "any_level", "n": 10, "reward": {"data": 1500}},
 			{"text": "Found Haven", "kind": "tower", "n": 5, "reward": {}},
@@ -266,6 +266,53 @@ const RESEARCH := [
 	{"id": "night2", "name": "Autopilot", "icon": "train", "chapter": 4, "cost": {"data": 2400, "parts": 24000}, "time": 8100.0, "effect": {"offline": 4.0}, "text": "Work continues 4 h longer while you are away"},
 	{"id": "climate1", "name": "Climate Models", "icon": "sun", "chapter": 4, "cost": {"data": 3200, "parts": 30000}, "time": 9000.0, "effect": {"all": 0.1}, "text": "+10% to every output"},
 ]
+
+## Supply contracts: three short side tasks at a time. Amounts and rewards scale with the
+## chapter unless "fixed"; a claimed slot offers a new contract after CONTRACT_COOLDOWN of play.
+const CONTRACT_SCALE := [1.0, 4.0, 12.0, 30.0, 70.0]
+const CONTRACT_COOLDOWN := 1800.0
+const CONTRACTS := [
+	{"id": "salvage", "text": "Salvage %s scrap", "icon": "scrap", "stat": "salvaged", "n": 800, "reward": {"parts": 80}},
+	{"id": "parts", "text": "Make %s parts", "icon": "parts", "stat": "parts_made", "n": 200, "reward": {"scrap": 500}},
+	{"id": "food", "text": "Grow %s food", "icon": "food", "stat": "food_made", "n": 250, "reward": {"water": 150}},
+	{"id": "water", "text": "Recycle %s water", "icon": "water", "stat": "water_made", "n": 250, "reward": {"food": 150}},
+	{"id": "upgrades", "text": "Upgrade carriages %s times", "icon": "hammer", "stat": "upgrades", "n": 3, "fixed": true, "reward": {"parts": 120}},
+	{"id": "events", "text": "Handle %s events", "icon": "warning", "stat": "events", "n": 2, "fixed": true, "reward": {"scrap": 600}},
+	{"id": "boosts", "text": "Use Overdrive %s times", "icon": "up", "stat": "boosts", "n": 3, "fixed": true, "reward": {"parts": 100}},
+	{"id": "research", "text": "Finish %s research project", "icon": "flask", "stat": "research", "n": 1, "fixed": true, "chapter": 1, "reward": {"data": 30}},
+]
+
+## Achievements: one-time milestones, rewarded automatically (see Game.stat_value()).
+const ACHIEVEMENTS := [
+	{"id": "salv1", "name": "Scavenger", "text": "Salvage 10K scrap", "stat": "salvaged", "n": 10000, "reward": {"parts": 150}},
+	{"id": "salv2", "name": "Salvage Baron", "text": "Salvage 1M scrap", "stat": "salvaged", "n": 1000000, "reward": {"parts": 4000}},
+	{"id": "salv3", "name": "Ruin Eater", "text": "Salvage 25M scrap", "stat": "salvaged", "n": 25000000, "reward": {"parts": 30000}},
+	{"id": "parts1", "name": "Machinist", "text": "Make 10K parts", "stat": "parts_made", "n": 10000, "reward": {"scrap": 6000}},
+	{"id": "parts2", "name": "Assembly Line", "text": "Make 1M parts", "stat": "parts_made", "n": 1000000, "reward": {"scrap": 200000}},
+	{"id": "crew1", "name": "Full House", "text": "25 survivors aboard", "stat": "survivors", "n": 25, "reward": {"food": 500}},
+	{"id": "crew2", "name": "Town on Rails", "text": "50 survivors aboard", "stat": "survivors", "n": 50, "reward": {"food": 3000}},
+	{"id": "crew3", "name": "The Ark", "text": "80 survivors aboard", "stat": "survivors", "n": 80, "reward": {"food": 15000}},
+	{"id": "vet1", "name": "Veteran", "text": "A worker reaches Lv.5", "stat": "crew_level", "n": 5, "reward": {"data": 60}},
+	{"id": "vet2", "name": "Old Hand", "text": "A worker reaches Lv.10", "stat": "crew_level", "n": 10, "reward": {"data": 1000}},
+	{"id": "max1", "name": "Top of the Line", "text": "A carriage reaches Lv.10", "stat": "max_level", "n": 10, "reward": {"parts": 20000}},
+	{"id": "len1", "name": "Long Haul", "text": "15 carriages behind the locomotive", "stat": "carriages", "n": 15, "reward": {"scrap": 20000}},
+	{"id": "len2", "name": "Rolling City", "text": "20 carriages behind the locomotive", "stat": "carriages", "n": 20, "reward": {"scrap": 150000}},
+	{"id": "sci1", "name": "Eureka", "text": "Finish 5 research projects", "stat": "research", "n": 5, "reward": {"data": 150}},
+	{"id": "sci2", "name": "Think Tank", "text": "Finish every research project", "stat": "research", "n": 24, "reward": {"data": 3000}},
+	{"id": "land1", "name": "First Light", "text": "Restore a landmark", "stat": "landmarks", "n": 1, "reward": {"parts": 100}},
+	{"id": "land3", "name": "Pathfinder", "text": "Restore 3 landmarks", "stat": "landmarks", "n": 3, "reward": {"parts": 3000}},
+	{"id": "land5", "name": "Railhaven", "text": "Found Haven", "stat": "landmarks", "n": 5, "reward": {"data": 2000}},
+	{"id": "ev1", "name": "Weathered", "text": "Handle 25 events", "stat": "events", "n": 25, "reward": {"water": 2000}},
+	{"id": "boost1", "name": "Overclocked", "text": "Use Overdrive 25 times", "stat": "boosts", "n": 25, "reward": {"parts": 1500}},
+	{"id": "con1", "name": "Reliable", "text": "Complete 10 contracts", "stat": "contracts", "n": 10, "reward": {"scrap": 5000}},
+	{"id": "con2", "name": "Quartermaster", "text": "Complete 50 contracts", "stat": "contracts", "n": 50, "reward": {"scrap": 100000}},
+]
+
+## Overdrive: tap to run a carriage at double speed for a minute, then it cools down.
+const BOOSTABLE := ["greenhouse", "recycler", "workshop", "dronebay", "lab"]
+const BOOST_TIME := 60.0
+const BOOST_COOLDOWN := 600.0
+const BOOST_MULT := 2.0
 
 ## Event costs and rewards scale with the chapter so they stay meaningful (see Game.event_scale()).
 const EVENT_SCALE := [1.0, 3.0, 8.0, 20.0, 45.0]
@@ -345,7 +392,7 @@ static func build_cost(type: String, owned: int) -> Dictionary:
 
 
 static func upgrade_cost(type: String, level: int) -> Dictionary:
-	return scaled_cost(CARRIAGES[type]["upgrade"], pow(1.8, level - 1))
+	return scaled_cost(CARRIAGES[type]["upgrade"], pow(1.85, level - 1))
 
 
 ## Worker slots for a carriage type at a level.
@@ -394,7 +441,7 @@ static func storage_bonus(type: String, level: int) -> Dictionary:
 		"dronebay": return {"scrap": 120.0 * level}
 		"lab": return {"data": 80.0 * level}
 		"cargo":
-			var m := pow(2.0, level - 1) # outgrows upgrade costs (x1.8 per level) so holds never dead-end
+			var m := pow(2.0, level - 1) # outgrows upgrade costs (x1.85 per level) so holds never dead-end
 			return {"scrap": 500.0 * m, "parts": 250.0 * m, "food": 250.0 * m, "water": 250.0 * m, "data": 60.0 * m}
 	return {}
 
