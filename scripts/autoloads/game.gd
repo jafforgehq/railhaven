@@ -214,6 +214,11 @@ func advance_chapter() -> bool:
 	distance = 0.0
 	chapter_done = false
 	chapter_seen = false
+	# Unfinished contracts are re-issued at the new region's scale; finished ones stay claimable.
+	for i in contracts.size():
+		if contracts[i].get("id", "") != "" and not contract_claimable(i):
+			contracts[i] = {"id": ""}
+			contracts[i] = _new_contract()
 	toast.emit("Departing for the %s" % ch()["region"], "good")
 	chapter_started.emit(chapter)
 	_check_goals()

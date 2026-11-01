@@ -17,6 +17,7 @@ var _contracts: VBoxContainer
 var _con_rows := [] # per slot: [bar, label, button-or-null]
 var _con_sig := ""
 var _ach_btn: Button
+var _body: VBoxContainer
 
 
 func build() -> void:
@@ -31,6 +32,7 @@ func build() -> void:
 	var body := UIKit.vbox(8)
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(body)
+	_body = body
 	var c := Game.ch()
 	var title := UIKit.label(c["landmark_name"].to_upper(), "Header")
 	_dist = UIKit.label("", "Sub")
@@ -174,6 +176,8 @@ func _refresh_contracts() -> void:
 		sig += "%s|%s;" % [Game.contracts[i].get("id", ""), Game.contract_claimable(i)]
 	if sig != _con_sig:
 		_con_sig = sig
+		# A finished contract jumps to the top of the sheet so the reward is never missed.
+		_body.move_child(_contracts, 0 if Game.any_contract_claimable() else _body.get_child_count() - 2)
 		UIKit.clear(_contracts)
 		_con_rows.clear()
 		var head := UIKit.label("SUPPLY CONTRACTS", "Small")

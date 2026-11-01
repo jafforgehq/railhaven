@@ -323,7 +323,7 @@ func _process(delta: float) -> void:
 	# Ambient: weather intensities ease toward the active event.
 	var ev: String = Game.event.get("id", "")
 	_heat = move_toward(_heat, 1.0 if ev == "heatwave" else 0.0, delta * 0.4)
-	_storm = move_toward(_storm, 1.0 if ev == "sandstorm" else 0.0, delta * 0.4)
+	_storm = move_toward(_storm, 1.0 if ev == "sandstorm" or ev == "ashstorm" else 0.0, delta * 0.4)
 	for s in _layers.values():
 		s.heat = snappedf(_heat, 0.05)
 		s.storm = snappedf(_storm, 0.05)

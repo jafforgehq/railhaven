@@ -33,6 +33,8 @@ func _ready() -> void:
 		_detour.call_deferred()
 	elif OS.get_cmdline_user_args().has("--regions"):
 		_regions.call_deferred()
+	elif OS.get_cmdline_user_args().has("--events"):
+		_events.call_deferred()
 	else:
 		_tour.call_deferred()
 
@@ -81,6 +83,34 @@ func _regions() -> void:
 	await _shot("r9_research")
 	main.set_tab("crew")
 	await _shot("r9_crew")
+	get_tree().quit()
+
+
+## Every event popup at its first chapter, plus contracts and achievements.
+func _events() -> void:
+	var main: Node = get_parent()
+	await get_tree().create_timer(0.3).timeout
+	while not main._modal_stack.is_empty():
+		main.close_modal()
+	Game.new_game()
+	Game.chapter = 2
+	Game.res = {"scrap": 3000.0, "parts": 900.0, "food": 400.0, "water": 400.0, "data": 50.0}
+	main.world.on_chapter_started()
+	for id in ["trader", "rail", "ashstorm", "raiders"]:
+		Game.start_event(id)
+		await get_tree().create_timer(0.5).timeout
+		await _shot("e_%s" % id)
+		while not main._modal_stack.is_empty():
+			main.close_modal()
+		Game.event = {}
+	Game.goal_index = 0
+	Game.stats["salvaged"] += 1e6
+	Game.stats["parts_made"] += 1e6
+	main.set_tab("journey")
+	await get_tree().create_timer(0.5).timeout
+	await _shot("e_contracts")
+	Popups.achievements(main)
+	await _shot("e_achievements")
 	get_tree().quit()
 
 
