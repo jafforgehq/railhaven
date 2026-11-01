@@ -1,7 +1,7 @@
 class_name Popups
 extends RefCounted
-## Modal dialogs: offline report, environmental event choice, tower restored,
-## settings, job picker and chapter goals.
+## Modal dialogs: level won, overheated, leave level, booster shop, Condenser, daily gift,
+## out of lives, region restored, carriage info, settings and how to play.
 
 
 static func _modal_box(width := 640.0) -> VBoxContainer:
@@ -28,184 +28,314 @@ static func _title(text: String, sub := "", col := UIKit.TEXT) -> Control:
 	return v
 
 
-# ---------------------------------------------------------------- offline
+static func _big_icon(kind: String, size := 96, col := Color.WHITE) -> Control:
+	var ic := Icon.make(kind, size, col)
+	ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	return ic
 
-static func offline(main: Node, r: Dictionary) -> void:
+
+static func _reward_row(items: Array) -> Control:
+	# items: [[icon, text], ...]
+	var row := UIKit.hbox(18)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	for it in items:
+		var l := UIKit.label(it[1], "Title")
+		l.add_theme_font_size_override("font_size", 40)
+		row.add_child(UIKit.hbox(8, [Icon.make(it[0], 48), l]))
+	return row
+
+
+static func _ad_button(text: String) -> Button:
+	return UIKit.button(text, "GoldButton", "play", 64)
+
+
+# ---------------------------------------------------------------- level results
+
+static func win(main: Node, r: Dictionary) -> void:
 	var v := _modal_box(600)
-	v.add_child(_title("WHILE YOU WERE AWAY", UIKit.fmt_time(r["seconds"])))
-	var grid := GridContainer.new()
-	grid.columns = 4
-	grid.add_theme_constant_override("h_separation", 10)
-	for k in Data.CORE:
-		var g: float = r["gains"][k]
-		var val := UIKit.label(("+" if g >= 0 else "") + UIKit.fmt(g) if absf(g) >= 1.0 else "±0", "Value", HORIZONTAL_ALIGNMENT_CENTER)
-		val.add_theme_color_override("font_color", UIKit.GREEN if g >= 1.0 else (UIKit.RED if g <= -1.0 else UIKit.MUTED))
-		var ic := Icon.make(k, 44)
-		ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		var tile := UIKit.panel("Card", UIKit.vbox(4, [ic, UIKit.label(Data.RES_NAMES[k], "Small", HORIZONTAL_ALIGNMENT_CENTER), val]))
-		tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		grid.add_child(tile)
-	v.add_child(grid)
-	var extra: PackedStringArray = []
-	if r["survivors"] > 0:
-		extra.append("+%d survivors joined" % r["survivors"])
-	extra.append("%d km travelled" % int(r["distance"]))
-	if r["stages"] > 0:
-		extra.append("%d landmark stage%s finished" % [r["stages"], "" if r["stages"] == 1 else "s"])
-	if r.get("research", 0) > 0:
-		extra.append("%d research finished" % r["research"])
-	if r["gains"].get("data", 0.0) >= 1.0:
-		extra.append("+%s data" % UIKit.fmt(r["gains"]["data"]))
-	v.add_child(UIKit.label(" · ".join(extra), "Sub", HORIZONTAL_ALIGNMENT_CENTER))
-	var safe: bool = r["safe_mode"]
-	var status := UIKit.label("Safe mode engaged — rationing kept the crew alive. Growth slowed." if safe else "Crew safe · Systems stable", "")
-	status.add_theme_color_override("font_color", UIKit.ORANGE if safe else UIKit.GREEN)
-	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(UIKit.panel("Card", UIKit.hbox(8, [Icon.make("shield", 28, UIKit.ORANGE if safe else UIKit.GREEN), status])))
-	status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var btn := UIKit.button("COLLECT", "TealButton", "check", 70)
-	v.add_child(btn)
-	var g := Game.current_goal()
-	if not g.is_empty():
-		var p := Game.goal_progress(g)
-		v.add_child(UIKit.label("Next goal: %s (%d/%d)" % [g["text"], mini(p[0], p[1]), p[1]], "Small", HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(_big_icon("snowflake", 110, Color("9fe6ff")))
+	v.add_child(_title("CARRIAGE COOLED!", "Level %d complete" % r["level"], UIKit.TEAL))
+	v.add_child(_reward_row([["parts", "+%d" % r["parts"]], ["scrap", "+%d" % r["scrap"]]]))
+	if r["bonus"] > 0:
+		v.add_child(UIKit.label("Includes +%d scrap cool bonus for finishing below 70°C" % r["bonus"], "Small", HORIZONTAL_ALIGNMENT_CENTER))
+	var t := Game.current_task()
+	if not t.is_empty() and Game.task_block_reason() == "":
+		var hint := UIKit.label("You can restore: %s" % t["text"], "Accent", HORIZONTAL_ALIGNMENT_CENTER)
+		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(hint)
+	var cont := UIKit.button("CONTINUE", "TealButton", "check", 72)
+	v.add_child(cont)
 	var panel := _wrap(main, v, false)
-	btn.pressed.connect(func():
-		Audio.play("collect")
-		main.close_modal_of(panel))
+	cont.pressed.connect(func():
+		main.close_modal_of(panel)
+		main.show_home())
 
 
-# ---------------------------------------------------------------- events
+static func overheated(main: Node, screen: Node, stuck := false) -> void:
+	var v := _modal_box(600)
+	v.add_child(_big_icon("temp", 100, UIKit.RED))
+	v.add_child(_title("NO MOVES LEFT" if stuck else "OVERHEATED!", "Add a spare tank to keep going" if stuck else "The carriage hit %d°C" % int(Data.HEAT_MAX), UIKit.RED))
+	var cost: int = Game.continue_cost(screen.continues)
+	var pay := UIKit.button("COOL DOWN  -%d°C   %d" % [int(Data.CONTINUE_COOL), cost], "TealButton", "scrap", 66)
+	pay.disabled = Game.scrap < cost
+	var ad := _ad_button("WATCH AD TO COOL DOWN")
+	var quit := UIKit.button("GIVE UP (lose a life)", "RedButton", "heart", 60)
+	v.add_child(pay)
+	if screen.continues == 0:
+		v.add_child(ad)
+	v.add_child(quit)
+	var panel := _wrap(main, v, false)
+	pay.pressed.connect(func():
+		if Game.spend(cost):
+			main.close_modal_of(panel)
+			screen.continue_level())
+	ad.pressed.connect(func():
+		ad.disabled = true
+		Ads.rewarded("continue", func():
+			main.close_modal_of(panel)
+			screen.continue_level()))
+	quit.pressed.connect(func():
+		main.close_modal_of(panel)
+		screen.give_up())
 
-static func event(main: Node) -> void:
-	if Game.event.is_empty() or Game.event["choice"] != "":
-		return
-	var id: String = Game.event["id"]
-	var d: Dictionary = Data.EVENTS[id]
-	var v := _modal_box(660)
-	var head := UIKit.panel("Warn", UIKit.hbox(12, [Icon.make(d.get("icon", "warning"), 40, UIKit.ORANGE), UIKit.vbox(-4, [UIKit.label(d["title"], "Header"), UIKit.label(d["sub"], "Sub")])]))
-	v.add_child(head)
-	v.add_child(UIKit.wrap_label(d["text"], ""))
-	var row := UIKit.hbox(12)
-	v.add_child(row)
-	var timer := UIKit.label("", "Small", HORIZONTAL_ALIGNMENT_CENTER)
-	v.add_child(UIKit.hbox(6, [UIKit.spacer(), Icon.make("shield", 20, UIKit.MUTED), timer, UIKit.spacer()]))
-	var buttons := []
-	for choice in ["a", "b"]:
-		var o: Dictionary = d[choice]
-		var o_cost := Game.event_cost(id, choice)
-		var effect := UIKit.label(Game.event_effect(id, choice), "Accent" if choice == "a" else "Value")
-		if choice == "b":
-			effect.add_theme_color_override("font_color", UIKit.GOLD)
-		var cost: Control = UIKit.cost_row(o_cost, 24) if not o_cost.is_empty() else UIKit.label("No cost", "Small")
-		var btn := UIKit.button(o["label"], "TealButton" if choice == "a" else "GoldButton", "", 60)
-		var ch: String = choice
-		btn.pressed.connect(func():
-			if Game.choose_event(ch):
-				main.close_modal() # topmost; lambdas capture locals by value so `panel` is still null here
+
+static func confirm_leave(main: Node, screen: Node) -> void:
+	var v := _modal_box(540)
+	v.add_child(_title("LEAVE LEVEL?", "", UIKit.ORANGE))
+	v.add_child(UIKit.wrap_label("You will lose a life. Lives refill over time.", ""))
+	var stay := UIKit.button("KEEP PLAYING", "TealButton", "", 62)
+	var leave := UIKit.button("LEAVE", "RedButton", "heart", 62)
+	stay.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	leave.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_child(UIKit.hbox(10, [leave, stay]))
+	var panel := _wrap(main, v)
+	stay.pressed.connect(func(): main.close_modal_of(panel))
+	leave.pressed.connect(func():
+		main.close_modal_of(panel)
+		screen.give_up())
+
+
+# ---------------------------------------------------------------- shop & lives
+
+static func shop(main: Node, focus := "") -> void:
+	var v := _modal_box(620)
+	v.add_child(_title("BOOSTERS", "You have %d scrap" % Game.scrap))
+	var rows := []
+	for id in Data.BOOSTER_ORDER:
+		var d: Dictionary = Data.BOOSTERS[id]
+		var name := UIKit.label("%s  x%d" % [d["name"], Game.booster_count(id)], "Value")
+		var col := UIKit.vbox(0, [name, UIKit.wrap_label(d["desc"], "Small")])
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var buy := UIKit.button("%d" % d["price"], "GoldButton", "scrap", 58)
+		buy.custom_minimum_size.x = 140
+		buy.disabled = Game.scrap < int(d["price"])
+		var bid: String = id
+		buy.pressed.connect(func():
+			if Game.buy_booster(bid):
+				Audio.play("collect")
+				name.text = "%s  x%d" % [d["name"], Game.booster_count(bid)]
+				for r in rows:
+					r[0].disabled = Game.scrap < int(Data.BOOSTERS[r[1]]["price"])
 			else:
 				Audio.play("error"))
-		buttons.append([btn, o_cost, id == "signal" and choice == "a"])
-		var col := UIKit.vbox(8, [Icon.make(o["icon"], 48, UIKit.TEAL if choice == "a" else UIKit.GOLD), UIKit.label(o["title"], "Header"),
-			UIKit.wrap_label(o["desc"], "Small"), HSeparator.new(), cost, effect, UIKit.spacer(false), btn])
-		var card := UIKit.panel("CardTeal" if choice == "a" else "CardGold", col)
-		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(card)
-	var panel := _wrap(main, v, true)
+		rows.append([buy, id])
+		v.add_child(UIKit.panel("CardGold" if id == focus else "Card", UIKit.hbox(12, [Icon.make(d["icon"], 52), col, buy])))
+	var close := UIKit.button("CLOSE", "TealButton", "", 58)
+	v.add_child(close)
+	var panel := _wrap(main, v)
+	close.pressed.connect(func(): main.close_modal_of(panel))
+
+
+static func out_of_lives(main: Node) -> void:
+	var v := _modal_box(560)
+	v.add_child(_big_icon("heart", 96))
+	v.add_child(_title("OUT OF LIVES", "Next life in %s" % UIKit.fmt_time(Game.next_life_in())))
+	v.add_child(UIKit.wrap_label("Lives come back one every %d minutes. Refill now to keep cooling the train." % int(Data.LIFE_REGEN / 60.0), ""))
+	var refill := UIKit.button("REFILL ALL   %d" % Data.REFILL_COST, "TealButton", "scrap", 64)
+	refill.disabled = Game.scrap < Data.REFILL_COST
+	var ad := _ad_button("WATCH AD FOR 1 LIFE")
+	var close := UIKit.button("LATER", "", "", 56)
+	v.add_child(refill)
+	v.add_child(ad)
+	v.add_child(close)
+	var panel := _wrap(main, v)
+	refill.pressed.connect(func():
+		if Game.refill_lives():
+			Audio.play("collect")
+			main.close_modal_of(panel))
+	ad.pressed.connect(func():
+		ad.disabled = true
+		Ads.rewarded("life", func():
+			Game.lives = mini(Data.MAX_LIVES, Game.lives + 1)
+			Game.changed.emit()
+			main.close_modal_of(panel)))
+	close.pressed.connect(func(): main.close_modal_of(panel))
+
+
+# ---------------------------------------------------------------- condenser & daily
+
+static func condenser(main: Node) -> void:
+	var v := _modal_box(620)
+	v.add_child(_big_icon("condenser", 96))
+	var title := _title("CONDENSER", "Turns cool night air into scrap, even while you are away")
+	v.add_child(title)
+	var amount := UIKit.label("", "Title", HORIZONTAL_ALIGNMENT_CENTER)
+	var fill := UIKit.bar(0.0, UIKit.TEAL, 16)
+	var info := UIKit.label("", "Small", HORIZONTAL_ALIGNMENT_CENTER)
+	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(UIKit.hbox(8, [UIKit.spacer(), Icon.make("scrap", 48), amount, UIKit.spacer()]))
+	v.add_child(fill)
+	v.add_child(info)
+	var claim := UIKit.button("COLLECT", "TealButton", "check", 64)
+	var double := _ad_button("AD: COLLECT x2")
+	claim.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	double.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_child(UIKit.hbox(10, [claim, double]))
+	var up_text := UIKit.wrap_label("", "Small")
+	up_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var up := UIKit.button("UPGRADE", "GoldButton", "up", 58)
+	up.custom_minimum_size.x = 190
+	v.add_child(UIKit.panel("CardGold", UIKit.hbox(10, [up_text, up])))
+	var close := UIKit.button("CLOSE", "", "", 56)
+	v.add_child(close)
+	var panel := _wrap(main, v)
 	var refresh := func():
-		if Game.event.is_empty() or Game.event["choice"] != "" or Game.event.get("id", "") != id:
-			main.close_modal_of(panel)
-			return
-		var fmt: String = {"signal": "The flare fades in %ds", "trader": "The traders leave in %ds", "raiders": "Raiders strike in %ds"}.get(id, "Automatic safe mode in %ds")
-		timer.text = fmt % int(ceil(Game.event["decide_left"]))
-		for b in buttons:
-			b[0].disabled = not Game.can_afford(b[1]) or (b[2] and not Game.can_rescue())
+		var l := Game.condenser_level()
+		var cap := Data.condenser_cap_hours(l)
+		(title.get_child(0) as Label).text = "CONDENSER  Lv.%d" % l
+		amount.text = "%d" % Game.condenser_amount()
+		fill.value = Game.condenser_seconds() / (cap * 3600.0)
+		info.text = "FULL: collect it to keep harvesting (a full tank adds a booster)" if Game.condenser_full() else "%d scrap per hour · holds %d hours · a full tank adds a booster" % [int(Data.condenser_rate(l)), int(cap)]
+		claim.disabled = not Game.condenser_ready()
+		double.disabled = not Game.condenser_ready() or double.has_meta("used")
+		if l >= Data.CONDENSER_MAX:
+			up_text.text = "Fully upgraded"
+			up.disabled = true
+		else:
+			up_text.text = "Lv.%d: %d scrap/h, holds %d h\nCost %d scrap" % [l + 1, int(Data.condenser_rate(l + 1)), int(Data.condenser_cap_hours(l + 1)), Data.condenser_upgrade_cost(l)]
+			up.disabled = Game.condenser_upgrade_block() != ""
 	refresh.call()
-	panel.set_meta("refresh", refresh)
 	var t := Timer.new()
-	t.wait_time = 0.25
+	t.wait_time = 0.5
 	t.autostart = true
 	t.timeout.connect(refresh)
 	panel.add_child(t)
+	var collect := func(mult: int):
+		var got := Game.claim_condenser(mult)
+		if got.is_empty():
+			return
+		Audio.play("collect")
+		main.show_toast("Condenser: +%d scrap%s" % [got["scrap"], (" and a " + Data.BOOSTERS[got["booster"]]["name"]) if got["booster"] != "" else ""], "good")
+		refresh.call()
+	claim.pressed.connect(func(): collect.call(1))
+	double.pressed.connect(func():
+		double.set_meta("used", true)
+		double.disabled = true
+		Ads.rewarded("condenser", func(): collect.call(2)))
+	up.pressed.connect(func():
+		if Game.upgrade_condenser():
+			Audio.play("upgrade")
+			refresh.call())
+	close.pressed.connect(func(): main.close_modal_of(panel))
 
 
-# ---------------------------------------------------------------- chapter complete
+static func daily(main: Node) -> void:
+	var v := _modal_box(540)
+	v.add_child(_big_icon("gift", 100))
+	if Game.daily_ready():
+		v.add_child(_title("DAILY SUPPLY DROP", "A crate fell from a passing drone"))
+		var open := UIKit.button("OPEN", "TealButton", "gift", 66)
+		v.add_child(open)
+		var panel := _wrap(main, v)
+		open.pressed.connect(func():
+			var got := Game.claim_daily()
+			Audio.play("collect")
+			main.close_modal_of(panel)
+			main.show_toast("Supply drop: +%d scrap and a %s" % [got["scrap"], Data.BOOSTERS[got["booster"]]["name"]], "good"))
+	else:
+		v.add_child(_title("NEXT DROP", "in %s" % UIKit.fmt_time(Game.daily_in())))
+		var close := UIKit.button("OK", "TealButton", "", 58)
+		v.add_child(close)
+		var panel := _wrap(main, v)
+		close.pressed.connect(func(): main.close_modal_of(panel))
 
-static func chapter_complete(main: Node) -> void:
-	Game.chapter_seen = true
-	var c := Game.ch()
+
+# ---------------------------------------------------------------- region
+
+static func region_complete(main: Node) -> void:
+	Game.region_seen = true
+	var c := Game.region()
 	var v := _modal_box(640)
-	var ic := Icon.make(c["landmark"], 96, UIKit.TEAL)
-	ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	v.add_child(ic)
-	var last := Game.is_last_chapter()
-	v.add_child(_title(("%s IS FOUNDED" if last else "%s RESTORED") % c["landmark_name"].to_upper(), "Chapter %d complete" % (Game.chapter + 1), UIKit.TEAL))
+	v.add_child(_big_icon(c["landmark"], 110, UIKit.TEAL))
+	var last := Game.is_last_region()
+	v.add_child(_title(("%s IS FOUNDED" if last else "%s RESTORED") % c["landmark_name"].to_upper(), "Region %d of %d complete" % [Game.region_index + 1, Data.REGIONS.size()], UIKit.TEAL))
 	v.add_child(UIKit.wrap_label(c["done_text"], ""))
 	var btn: Button
 	if last:
-		var t := UIKit.wrap_label("You finished the journey. The train keeps running: keep upgrading, research everything and grow your crew.", "Small")
-		v.add_child(UIKit.panel("CardGold", t))
+		v.add_child(UIKit.panel("CardGold", UIKit.wrap_label("The journey is complete! Keep playing levels to collect scrap and boosters.", "Small")))
 		btn = UIKit.button("KEEP PLAYING", "TealButton", "star", 70)
 	else:
-		var nxt: Dictionary = Data.CHAPTERS[Game.chapter + 1]
-		var lbl := UIKit.label("NEXT: %s" % nxt["region"].to_upper(), "Small", HORIZONTAL_ALIGNMENT_CENTER)
-		lbl.add_theme_color_override("font_color", UIKit.GOLD)
-		v.add_child(lbl)
-		var rows := [["map", nxt["region"], "%s · %d°C outside" % [nxt["landmark_name"], nxt["temp"]]],
-			["up", "Carriages up to Lv.%d" % nxt["level_cap"], "Train length %d carriages" % nxt["train"]]]
-		if nxt["perk_text"] != "":
-			rows.append(["star", "Region bonus", nxt["perk_text"]])
-		for t in Data.BUILDABLE:
-			if int(Data.CARRIAGES[t]["chapter"]) == Game.chapter + 1:
-				rows.append([Data.CARRIAGES[t]["icon"], "New carriage: %s" % Data.CARRIAGES[t]["name"], Data.CARRIAGES[t]["desc"]])
-		for r in rows:
-			var txt := UIKit.vbox(0, [UIKit.label(r[1], "Value"), UIKit.wrap_label(r[2], "Small")])
-			txt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			v.add_child(UIKit.panel("Card", UIKit.hbox(12, [Icon.make(r[0], 40, UIKit.TEAL), txt])))
+		var nxt: Dictionary = Data.REGIONS[Game.region_index + 1]
+		var txt := UIKit.vbox(0, [UIKit.label("Next: %s" % nxt["region"], "Value"), UIKit.wrap_label(nxt["desc"], "Small")])
+		txt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		v.add_child(UIKit.panel("Card", UIKit.hbox(12, [Icon.make(nxt["landmark"], 48, UIKit.TEAL), txt])))
 		btn = UIKit.button("DEPART", "TealButton", "train", 70)
 	v.add_child(btn)
 	var panel := _wrap(main, v, false)
 	btn.pressed.connect(func():
 		main.close_modal_of(panel)
-		if Game.advance_chapter():
+		if Game.advance_region():
 			Audio.play("whistle"))
 	Audio.play("whistle")
-	if Game.autosave:
-		Game.save_game()
 
 
-# ---------------------------------------------------------------- settings
+static func carriage_info(main: Node, uid: int) -> void:
+	var c := Game.carriage(uid)
+	if c.is_empty():
+		return
+	if c["type"] == "condenser":
+		condenser(main)
+		return
+	var d: Dictionary = Data.CARRIAGES[c["type"]]
+	var v := _modal_box(520)
+	v.add_child(_big_icon(d["icon"], 80, UIKit.TEAL))
+	v.add_child(_title(d["name"].to_upper(), "Lv.%d" % c["level"] if c["type"] != "locomotive" else ""))
+	var text: String = d.get("desc", "Restored with parts from puzzle wins. Keep cooling carriages to upgrade it further.")
+	if c["type"] == "cooling":
+		text += " Puzzles now start at %d°C." % int(Game.start_heat())
+	v.add_child(UIKit.wrap_label(text, ""))
+	var ok := UIKit.button("OK", "TealButton", "", 58)
+	v.add_child(ok)
+	var panel := _wrap(main, v)
+	ok.pressed.connect(func(): main.close_modal_of(panel))
+
+
+# ---------------------------------------------------------------- settings & help
 
 static func settings(main: Node) -> void:
 	var v := _modal_box(560)
 	v.add_child(_title("SETTINGS"))
-	var music := CheckButton.new()
-	music.text = "Music"
-	music.button_pressed = Audio.music_on
-	music.toggled.connect(func(on): Audio.set_music(on))
-	var sfx := CheckButton.new()
-	sfx.text = "Sound effects & ambience"
-	sfx.button_pressed = Audio.sfx_on
-	sfx.toggled.connect(func(on): Audio.set_sfx(on))
-	var buzz := CheckButton.new()
-	buzz.text = "Vibration"
-	buzz.button_pressed = Audio.haptics_on
-	buzz.toggled.connect(func(on): Audio.set_haptics(on))
-	for c in [music, sfx, buzz]:
-		c.focus_mode = Control.FOCUS_NONE
-		c.add_theme_font_size_override("font_size", 26)
-		c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	v.add_child(UIKit.panel("Card", UIKit.vbox(6, [UIKit.hbox(10, [Icon.make("music", 28, UIKit.TEAL), music]), UIKit.hbox(10, [Icon.make("sound", 28, UIKit.TEAL), sfx]), UIKit.hbox(10, [Icon.make("bulb", 28, UIKit.TEAL), buzz])])))
-	var credits := UIKit.wrap_label("Railhaven: Scorched Line · first playable. Music: \"Lone Scavenger\" by vitalezzz (CC0). Fanfare: \"Smooth Guitar Fanfare\" by OwlishMedia (CC BY 4.0). Wind: \"Wind Loop\" by AntumDeluge from InspectorJ (CC BY 3.0). SFX: Kenney, Wikimedia Commons and OpenGameArt contributors (CC0). Font: Barlow Condensed (OFL). Full list in assets/audio/CREDITS.md.", "Small")
-	v.add_child(credits)
+	var rows := []
+	for s in [["Music", "music", Audio.music_on, func(on): Audio.set_music(on)],
+			["Sound effects", "sound", Audio.sfx_on, func(on): Audio.set_sfx(on)],
+			["Vibration", "bulb", Audio.haptics_on, func(on): Audio.set_haptics(on)]]:
+		var cb := CheckButton.new()
+		cb.text = s[0]
+		cb.button_pressed = s[2]
+		cb.toggled.connect(s[3])
+		cb.focus_mode = Control.FOCUS_NONE
+		cb.add_theme_font_size_override("font_size", 26)
+		cb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		rows.append(UIKit.hbox(10, [Icon.make(s[1], 28, UIKit.TEAL), cb]))
+	v.add_child(UIKit.panel("Card", UIKit.vbox(6, rows)))
+	v.add_child(UIKit.wrap_label("Railhaven: Scorched Line. Music: \"Lone Scavenger\" by vitalezzz (CC0). Fanfare: \"Smooth Guitar Fanfare\" by OwlishMedia (CC BY 4.0). Wind: \"Wind Loop\" by AntumDeluge from InspectorJ (CC BY 3.0). SFX: Kenney, Wikimedia Commons and OpenGameArt contributors (CC0). Font: Barlow Condensed (OFL). Full list in assets/audio/CREDITS.md.", "Small"))
 	var how := UIKit.button("HOW TO PLAY", "", "bulb", 58)
 	v.add_child(how)
 	var reset := UIKit.button("RESET PROGRESS", "RedButton", "warning", 58)
 	var close := UIKit.button("CLOSE", "TealButton", "", 58)
-	v.add_child(UIKit.hbox(10, [reset, close]))
 	reset.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	close.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_child(UIKit.hbox(10, [reset, close]))
 	var panel := _wrap(main, v)
 	close.pressed.connect(func(): main.close_modal_of(panel))
 	how.pressed.connect(func():
@@ -217,7 +347,7 @@ static func settings(main: Node) -> void:
 static func _confirm_reset(main: Node, parent: Control) -> void:
 	var v := _modal_box(520)
 	v.add_child(_title("RESET PROGRESS?", "", UIKit.RED))
-	v.add_child(UIKit.wrap_label("This deletes your train, crew and journey and starts over. It cannot be undone.", ""))
+	v.add_child(UIKit.wrap_label("This deletes your train, levels and scrap and starts over. It cannot be undone.", ""))
 	var yes := UIKit.button("DELETE SAVE", "RedButton", "", 58)
 	var no := UIKit.button("KEEP PLAYING", "TealButton", "", 58)
 	yes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -229,117 +359,19 @@ static func _confirm_reset(main: Node, parent: Control) -> void:
 		main.close_modal_of(panel)
 		main.close_modal_of(parent)
 		Game.reset_game()
-		main.world.rebuild()
-		main._rebuild_plates()
-		main.set_tab("train"))
+		main.world.on_region_started()
+		main.show_home())
 
-
-# ---------------------------------------------------------------- job picker
-
-static func assign(main: Node, sid: int) -> void:
-	var s := Game.survivor(sid)
-	if s.is_empty():
-		return
-	var v := _modal_box(560)
-	var pic := Portrait.new()
-	pic.look = s["look"]
-	pic.role = s["role"]
-	pic.custom_minimum_size = Vector2(80, 80)
-	v.add_child(UIKit.hbox(14, [pic, UIKit.vbox(0, [UIKit.label(s["name"], "Title"), UIKit.label("%s · +25%% in %s" % [s["role"], Data.CARRIAGES[Data.ROLE_JOB[s["role"]]]["name"]], "Sub")])]))
-	var list := UIKit.vbox(8)
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.custom_minimum_size.y = 460
-	scroll.add_child(list)
-	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	v.add_child(scroll)
-	var rest := UIKit.button("Rest in Living Quarters", "" if s["job"] != 0 else "GreenButton", "bed", 58)
-	rest.pressed.connect(func():
-		Game.assign(sid, 0)
-		main.close_modal())
-	list.add_child(rest)
-	for c in Game.carriages:
-		var slots := Data.slots(c["type"], c["level"])
-		if slots == 0:
-			continue
-		var d: Dictionary = Data.CARRIAGES[c["type"]]
-		var here: bool = s["job"] == c["uid"]
-		var n := Game.workers_in(c["uid"]).size()
-		var star := "  ★" if Data.ROLE_JOB.get(s["role"], "") == c["type"] else ""
-		var b := UIKit.button("%s Lv.%d   %d/%d%s" % [d["name"], c["level"], n, slots, star], "GreenButton" if here else "", d["icon"], 58)
-		b.disabled = not here and n >= slots
-		var uid: int = c["uid"]
-		b.pressed.connect(func():
-			Game.assign(sid, uid)
-			main.close_modal())
-		list.add_child(b)
-	_wrap(main, v)
-
-
-# ---------------------------------------------------------------- goals
-
-static func goals(main: Node) -> void:
-	var v := _modal_box(600)
-	v.add_child(_title("CHAPTER %d" % (Game.chapter + 1), "%s · %s" % [Game.region_name(), Game.ch()["landmark_name"]]))
-	var gl := Game.goals()
-	for i in gl.size():
-		var g: Dictionary = gl[i]
-		var done := i < Game.goal_index
-		var cur := i == Game.goal_index
-		var p := Game.goal_progress(g)
-		var l := UIKit.label(g["text"], "Value" if cur else "")
-		l.add_theme_color_override("font_color", UIKit.GREEN if done else (UIKit.TEXT if cur else UIKit.MUTED))
-		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var right := UIKit.label("" if not cur else "%d/%d" % [mini(p[0], p[1]), p[1]], "Small")
-		var reward := Data.cost_text(g["reward"])
-		var row := UIKit.hbox(10, [Icon.make("check" if done else ("star" if cur else "lock"), 24, UIKit.GREEN if done else (UIKit.GOLD if cur else UIKit.MUTED)), l, UIKit.label(reward, "Small"), right])
-		v.add_child(UIKit.panel("CardGold" if cur else "Card", row))
-	var close := UIKit.button("CLOSE", "TealButton", "", 58)
-	v.add_child(close)
-	var panel := _wrap(main, v)
-	close.pressed.connect(func(): main.close_modal_of(panel))
-
-
-# ---------------------------------------------------------------- achievements
-
-static func achievements(main: Node) -> void:
-	var v := _modal_box(620)
-	v.add_child(_title("ACHIEVEMENTS", "%d of %d unlocked" % [Game.achievements.size(), Data.ACHIEVEMENTS.size()]))
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.custom_minimum_size.y = clampf(main.get_viewport_rect().size.y - 520.0, 420.0, 900.0)
-	var list := UIKit.vbox(8)
-	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(list)
-	v.add_child(scroll)
-	for a in Data.ACHIEVEMENTS:
-		var done: bool = Game.achievements.has(a["id"])
-		var name := UIKit.label(a["name"], "Value")
-		name.add_theme_color_override("font_color", UIKit.GOLD if done else UIKit.TEXT)
-		var cur := Game.stat_value(a["stat"])
-		var info := UIKit.label(a["text"] + ("" if done else "  (%s / %s)" % [UIKit.fmt(minf(cur, a["n"])), UIKit.fmt(a["n"])]), "Small")
-		var col := UIKit.vbox(0, [name, info])
-		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var row := UIKit.hbox(10, [Icon.make("trophy" if done else "lock", 36, UIKit.GOLD if done else UIKit.MUTED), col, UIKit.cost_row(a["reward"], 20)])
-		list.add_child(UIKit.panel("CardGold" if done else "Card", row))
-	var close := UIKit.button("CLOSE", "TealButton", "", 58)
-	v.add_child(close)
-	var panel := _wrap(main, v)
-	close.pressed.connect(func(): main.close_modal_of(panel))
-
-
-# ---------------------------------------------------------------- how to play
 
 static func how_to_play(main: Node) -> void:
 	var v := _modal_box(600)
-	v.add_child(_title("HOW TO PLAY", "Keep the last train alive"))
+	v.add_child(_title("HOW TO PLAY", "Keep the last train cool"))
 	for step in [
-		["drone", "Drones fly out on their own and bring back scrap."],
-		["parts", "Workers in the Workshop turn scrap into parts."],
-		["hammer", "Spend scrap and parts to build and upgrade carriages."],
-		["crew", "Food, water and beds let survivors join. Tap a carriage, then + to give them work."],
-		["map", "Goal: reach each region's landmark and restore it with drone expeditions, then travel on."],
-		["star", "Not sure what to do? Follow NEXT STEP at the top and tap GO."],
+		["tank", "Tap a tank to lift its top canisters, then tap another tank to pour them onto the same colour or into an empty tank."],
+		["temp", "Every pour heats the carriage. Fill each tank with one colour before the gauge hits 70°C."],
+		["snowflake", "Sealing tanks cools the carriage. Seal several within a few seconds for a cold snap."],
+		["parts", "Wins give parts. Spend them to restore the train and the region's landmark."],
+		["condenser", "The Condenser collects scrap while you are away. Tap it to collect."],
 	]:
 		var l := UIKit.wrap_label(step[1], "")
 		l.add_theme_font_size_override("font_size", 23)

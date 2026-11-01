@@ -10,7 +10,7 @@ signal tapped_empty
 signal float_text(world_pos: Vector2, text: String, color: Color)
 
 const MAX_ZOOM := 2.5 # design px per world unit when there is room
-const MIN_ZOOM := 1.7
+const MIN_ZOOM := 1.3
 const TRAIN_H := 168.0 # world units the camera tries to keep visible (roof gear to rails)
 const PITCH := CarriageView.W + 6.0
 const TRAIN_MID_Y := -78.0
@@ -47,6 +47,7 @@ var _target_y := TRAIN_MID_Y
 var _target_zoom := MAX_ZOOM
 var _band_mid := 490.0
 var _cam := Vector2(118, TRAIN_MID_Y)
+var heat_uid := 0 # carriage glowing with the puzzle's heat
 
 
 func _ready() -> void:
@@ -64,11 +65,6 @@ func _ready() -> void:
 	add_child(ghost)
 	_build_fx()
 	rebuild()
-	Game.carriage_built.connect(_on_built)
-	Game.carriage_upgraded.connect(_on_upgraded)
-	Game.drone_returned.connect(_on_drone_returned)
-	Game.carriage_boosted.connect(_on_boosted)
-	Game.chapter_complete.connect(func(): _set_cool())
 	_apply_region()
 	_set_cool()
 
@@ -210,7 +206,7 @@ func rebuild() -> void:
 		v.position.x = x
 		x += (LocoView.LW + 6.0) if c["type"] == "locomotive" else PITCH
 	ghost.position = Vector2(x, 0)
-	ghost.visible = Game.carriages.size() - 1 < Game.train_length()
+	ghost.visible = false # carriages arrive through restoration tasks, not a build slot
 	_train.ends = views.values().map(func(v): return v.position.x)
 	_train.queue_redraw()
 	var length := train_end()
@@ -247,10 +243,14 @@ func focus(uid: int) -> void:
 	_vel = 0.0
 
 
-func _on_built(uid: int) -> void:
+## A restoration task finished: drop a new carriage in, or flash an upgraded one.
+func celebrate(uid: int, built: bool) -> void:
 	rebuild()
 	var v: CarriageView = views.get(uid)
-	if v:
+	if v == null:
+		return
+	v.level = Game.carriage(uid).get("level", v.level)
+	if built:
 		v.position.y = -70.0
 		v.modulate.a = 0.0
 		var tw := create_tween().set_parallel()
@@ -262,42 +262,27 @@ func _on_built(uid: int) -> void:
 			v.flash = 1.0
 			for k in 5:
 				v.spark(Vector2(randf_range(10, CarriageView.W - 10), -20), 6, Color("ffcf7a")))
-	focus(uid)
-	Audio.play("build")
-
-
-func _on_upgraded(uid: int) -> void:
-	var v: CarriageView = views.get(uid)
-	if v:
-		v.flash = 1.0
-		for k in 6:
-			v.spark(Vector2(randf_range(20, CarriageView.W - 20), randf_range(-110, -40)), 6, Color("7ff0e0"))
-	Audio.play("upgrade")
-
-
-func _on_boosted(uid: int) -> void:
-	var v: CarriageView = views.get(uid)
-	if v == null:
-		return
-	v.flash = 0.7
-	for k in 10:
-		v.spark(Vector2(randf_range(20, CarriageView.W - 20), randf_range(-110, -40)), 6, Color("ffd27a"))
-	float_text.emit(v.position + Vector2(90, -160), "OVERDRIVE x2", Color("ffd27a"))
-
-
-func _on_drone_returned(uid: int, amount: float) -> void:
-	var v: CarriageView = views.get(uid)
-	if v == null:
-		return
-	if amount >= 1.0:
-		float_text.emit(v.position + Vector2(116, -160), "+%d" % int(amount), RES_COLOR["scrap"])
 	else:
-		float_text.emit(v.position + Vector2(90, -160), "Hold full", Color("e9b04a"))
-	Audio.play("drone_return")
+		v.flash = 1.0
+		for k in 8:
+			v.spark(Vector2(randf_range(20, CarriageView.W - 20), randf_range(-110, -40)), 6, Color("7ff0e0"))
+	focus(uid)
+	Audio.play("build" if built else "upgrade")
 
 
-## New chapter: swap the region's scenery and landmark, make room for the longer train.
-func on_chapter_started() -> void:
+## Puzzle won: the heated carriage frosts over.
+func frost_burst() -> void:
+	var v: CarriageView = views.get(heat_uid)
+	if v == null:
+		return
+	v.flash = 0.8
+	v.frost = 1.0
+	for k in 14:
+		v.spark(Vector2(randf_range(10, CarriageView.W - 10), randf_range(-120, -30)), 6, Color("bff4ff"))
+
+
+## New region: swap the scenery and landmark.
+func on_region_started() -> void:
 	_apply_region()
 	_set_cool()
 	rebuild()
@@ -309,9 +294,13 @@ func _apply_region() -> void:
 		s.set_region(c["scenery"], c["landmark"], c["ground"])
 
 
+func on_region_restored() -> void:
+	_set_cool()
+
+
 func _set_cool() -> void:
 	for s in _layers.values():
-		s.cool = 1.0 if Game.chapter_done else 0.0
+		s.cool = 1.0 if Game.region_done else 0.0
 		s.queue_redraw()
 
 
@@ -320,23 +309,23 @@ func _set_cool() -> void:
 func _process(delta: float) -> void:
 	_t += delta
 	var vp := view_size()
-	# Ambient: weather intensities ease toward the active event.
-	var ev: String = Game.event.get("id", "")
-	_heat = move_toward(_heat, 1.0 if ev == "heatwave" else 0.0, delta * 0.4)
-	_storm = move_toward(_storm, 1.0 if ev == "sandstorm" or ev == "ashstorm" else 0.0, delta * 0.4)
+	# Ambient: the scenery bakes as the puzzle heats up.
+	_heat = move_toward(_heat, Game.heat_visual * 0.7, delta * 0.8)
+	_storm = 0.0
 	for s in _layers.values():
 		s.heat = snappedf(_heat, 0.05)
-		s.storm = snappedf(_storm, 0.05)
+		s.storm = 0.0
+	for uid in views:
+		views[uid].heat = Game.heat_visual if uid == heat_uid else 0.0
 	var sky: Node2D = _layers["landmark"]
-	var ld := Game.landmark_distance()
-	sky.tower = snappedf(clampf((Game.distance - ld * 0.6) / (ld * 0.4), 0.0, 1.0), 0.05)
-	sky.restored = Game.chapter_done
+	sky.tower = snappedf(Game.landmark_visibility(), 0.05)
+	sky.restored = Game.region_done
 	_storm_fx.emitting = _storm > 0.3
 	_storm_rect.color.a = _storm * 0.28
 	Audio.set_ambience_intensity(0.2 + _storm * 0.8)
 
 	# Scenery motion = train speed.
-	var speed := 70.0 * Game.train_speed() / Data.TRAIN_SPEED
+	var speed := 70.0
 	for p in _parallax:
 		p.autoscroll = Vector2(speed * float(p.get_meta("auto")), 0)
 
@@ -375,7 +364,6 @@ func _process(delta: float) -> void:
 			v.position.y = -1.0 if fmod(_t * 1.6 - i * 0.12, 1.0) < 0.06 else 0.0
 		i += 1
 
-	_production_pops()
 	_whistle -= delta
 	if _whistle <= 0.0:
 		_whistle = randf_range(70.0, 150.0)
@@ -384,19 +372,6 @@ func _process(delta: float) -> void:
 
 func _is_tweening(v: Node2D) -> bool:
 	return v.modulate.a < 1.0 or v.position.y < -1.5
-
-
-func _production_pops() -> void:
-	for c in Game.carriages:
-		var res: String = Data.CARRIAGES[c["type"]].get("res", "")
-		if res == "" or res == "scrap":
-			continue
-		var threshold := 2.0 if res == "parts" else 4.0
-		if c["acc"] >= threshold:
-			var v: CarriageView = views.get(c["uid"])
-			if v:
-				float_text.emit(v.position + Vector2(randf_range(60, 170), -150), "+%d" % int(c["acc"]), RES_COLOR[res])
-			c["acc"] = fmod(c["acc"], 1.0)
 
 
 ## Camera keeps the train centred inside the visible band between top HUD and bottom panel.
@@ -534,7 +509,7 @@ class DroneLayer extends CarriageView:
 				continue
 			var base := v.position + Vector2(116, -150)
 			var tau: float = c["timer"]
-			var n := mini(Data.drones(c["level"]), 3)
+			var n := mini(c["level"], 3)
 			var rem := Game.drone_run_time() - tau
 			for i in n:
 				var start := base + Vector2((i - 1) * 16, 0)
@@ -553,13 +528,3 @@ class DroneLayer extends CarriageView:
 					draw_polygon(PackedVector2Array([p + Vector2(-1, 2), p + Vector2(1, 2), p + Vector2(10, 40), p + Vector2(-6, 40)]),
 						PackedColorArray([Color(0.6, 1, 0.95, 0.3), Color(0.6, 1, 0.95, 0.3), Color(0.6, 1, 0.95, 0), Color(0.6, 1, 0.95, 0)]))
 					draw_drone(p.round(), 0.5, t + i)
-		# Tower expedition: a heavy-lift drone heading out with parts.
-		if Game.expedition >= 0.0 and Game.tower_stage < Game.stages().size():
-			var bay := Game.first_of("dronebay")
-			var v2: CarriageView = world.views.get(bay.get("uid", -1))
-			if v2:
-				var total: float = Game.stages()[Game.tower_stage]["time"]
-				var k := clampf((total - Game.expedition) / 6.0, 0.0, 1.0)
-				if k < 1.0:
-					var p := v2.position + Vector2(116, -152) + Vector2(k * k * 260, -k * 200)
-					draw_drone(p.round(), lerpf(1.3, 0.5, k), t, true)

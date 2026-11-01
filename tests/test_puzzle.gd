@@ -1,0 +1,165 @@
+extends SceneTree
+## Headless self-check: godot --headless --path . -s tests/test_puzzle.gd
+## Covers the sort rules, every authored level's data, and the progress systems.
+## Uses the Game autoload with saving disabled (no user save is touched).
+
+var fails := 0
+
+
+func check(cond: bool, msg: String) -> void:
+	if not cond:
+		fails += 1
+		printerr("FAIL: ", msg)
+	else:
+		print("ok   ", msg)
+
+
+func _initialize() -> void:
+	await process_frame
+	var g: Node = root.get_node("Game")
+	g.autosave = false
+	g.set_process(false)
+	_board_rules()
+	_levels()
+	_progress(g)
+	print("\n%s (%d failures)" % ["PASS" if fails == 0 else "FAILED", fails])
+	quit(1 if fails > 0 else 0)
+
+
+func _board_rules() -> void:
+	var b := SortBoard.new()
+	b.load_level({"tanks": [[0, 1, 0, 0], [1, 0, 1, 1], []], "hidden": [[false, false, false, false], [false, false, false, false], []]})
+	check(b.top_run(0) == 2 and b.top_run(1) == 2, "top run counts matching canisters")
+	check(b.can_pour(0, 1) == 0, "cannot pour onto a different colour")
+	check(b.can_pour(0, 2) == 2, "pour moves the whole run into an empty tank")
+	var r := b.pour(0, 2)
+	check(r["n"] == 2 and b.tanks[0] == [0, 1] and b.tanks[2] == [0, 0], "pour result")
+	check(b.can_pour(1, 0) == 2, "run of 2 fits onto a matching top")
+	b.pour(1, 0)
+	b.pour(1, 2)
+	check(b.can_pour(0, 1) == 3 and not b.is_won(), "three onto one")
+	r = b.pour(0, 1)
+	check(r["completed"] and b.is_complete(1), "a full single-colour tank is complete")
+	check(b.can_pour(1, 2) == 0, "complete tanks are locked")
+	b.pour(0, 2)
+	check(b.is_won(), "level 1 solution wins")
+	check(b.undo() and not b.is_won() and b.tanks[0] == [0], "undo reverses the last pour")
+
+	# Capacity: only what fits moves.
+	var c := SortBoard.new()
+	c.load_level({"tanks": [[2, 0, 0, 0], [1, 1, 0], [1, 1]]})
+	check(c.can_pour(0, 1) == 1, "pour stops at capacity")
+
+	# Ash-covered canisters: revealed when exposed, hidden again on undo, run stops at them.
+	var h := SortBoard.new()
+	h.load_level({"tanks": [[3, 1, 2, 2], [2], []], "hidden": [[true, true, false, false], [false], []]})
+	check(h.top_run(0) == 2, "run includes visible canisters only")
+	h.pour(0, 2)
+	check(not h.hidden[0][1], "pouring exposes the next canister")
+	h.undo()
+	check(h.hidden[0][1], "undo hides it again")
+	var full := SortBoard.new()
+	full.load_level({"tanks": [[5, 5, 5], [5], []], "hidden": [[true, true, false], [false], []]})
+	r = full.pour(1, 0)
+	check(r["completed"] and not full.hidden[0][0], "completing a tank reveals its ash")
+
+	# Stuck detection and the spare tank.
+	var s := SortBoard.new()
+	s.load_level({"tanks": [[0, 1, 0, 1], [1, 0, 1, 0]]})
+	check(s.is_stuck(), "no legal pour = stuck")
+	s.add_tank()
+	check(not s.is_stuck() and s.tanks.size() == 3, "spare tank unsticks")
+
+
+func _levels() -> void:
+	var n: int = root.get_node("Game").level_count()
+	check(n >= 300, "300 authored levels (%d)" % n)
+	var ok := true
+	var bad := ""
+	for i in range(1, n + 1):
+		var d: Dictionary = root.get_node("Game").level_data(i)
+		var counts := {}
+		var cap_ok := true
+		for t in d["tanks"]:
+			cap_ok = cap_ok and t.size() <= Data.CAPACITY
+			for x in t:
+				counts[int(x)] = counts.get(int(x), 0) + 1
+		var each_four := counts.values().all(func(v): return v == Data.CAPACITY)
+		var empties: int = d["tanks"].filter(func(t): return t.is_empty()).size()
+		var fine: bool = cap_ok and each_four and empties >= 1 and int(d["moves"]) >= int(d["solution"]) and counts.size() <= Data.COLORS.size()
+		if not fine:
+			ok = false
+			bad = "level %d" % i
+			break
+	check(ok, "every level has 4 of each colour, an empty tank and a move budget >= its solution %s" % bad)
+	var big: Dictionary = root.get_node("Game").level_data(n + 57)
+	check(big["tanks"].size() >= 9, "levels past the authored set repeat with shuffled colours")
+	check(root.get_node("Game").level_data(1)["tanks"].size() == 3, "level 1 is the hand-made tutorial")
+
+
+func _progress(g: Node) -> void:
+	g.new_game()
+	check(g.lives == Data.MAX_LIVES and g.scrap == Data.START_SCRAP and g.level == 1, "new game")
+	check(g.count_type("condenser") == 1 and g.count_type("cooling") == 1, "train starts with Cooling Core and Condenser")
+
+	# Winning pays parts and scrap, heatwave levels pay double parts.
+	var r: Dictionary = g.win_level(50.0)
+	check(r["parts"] == 1 and r["scrap"] == Data.WIN_SCRAP + 20 and g.level == 2, "win pays 1 part + scrap + cool bonus")
+	g.level = 10
+	r = g.win_level(69.0)
+	check(r["hard"] and r["parts"] == 2, "heatwave level pays 2 parts")
+
+	# Tasks restore the train in order; the landmark ends the region.
+	g.parts = 0
+	check(g.task_block_reason().begins_with("Need"), "task needs parts")
+	g.parts = 1
+	check(g.complete_task() and g.level_of("quarters") == 2, "first task upgrades the quarters")
+	g.parts = 100
+	var n0: int = g.carriages.size()
+	g.complete_task()
+	check(g.carriages.size() == n0 + 1 and g.count_type("greenhouse") == 1, "build task adds a carriage")
+	while not g.region_done:
+		g.complete_task()
+	check(g.region_done and g.landmark_visibility() == 1.0, "landmark task restores the region")
+	check(g.advance_region() and g.region_index == 1 and g.task_index == 0, "depart for region 2")
+	check(g.start_heat() < Data.HEAT_START, "an upgraded Cooling Core starts puzzles cooler")
+
+	# Lives: losing costs one, they regenerate over time.
+	g.lives = Data.MAX_LIVES
+	g.lose_life()
+	check(g.lives == Data.MAX_LIVES - 1, "losing costs a life")
+	g.lives_at = g.now() - Data.LIFE_REGEN * 2.5
+	g.lives = 1
+	g._tick_lives()
+	check(g.lives == 3, "lives regenerate one per %d s" % int(Data.LIFE_REGEN))
+
+	# Condenser: fills over time up to its cap, a full tank adds a booster.
+	g.condenser_at = g.now() - 60.0
+	check(not g.condenser_ready(), "condenser needs a few minutes")
+	g.condenser_at = g.now() - 100 * 3600.0
+	check(g.condenser_full() and g.condenser_amount() == int(Data.condenser_rate(1) * Data.condenser_cap_hours(1)), "condenser caps at %d h" % int(Data.condenser_cap_hours(1)))
+	var boosters_before: int = Data.BOOSTER_ORDER.map(func(b): return g.booster_count(b)).reduce(func(a, b): return a + b)
+	var s0: int = g.scrap
+	var got: Dictionary = g.claim_condenser(2)
+	var boosters_after: int = Data.BOOSTER_ORDER.map(func(b): return g.booster_count(b)).reduce(func(a, b): return a + b)
+	check(g.scrap == s0 + got["scrap"] and got["scrap"] == 2 * int(Data.condenser_rate(1) * 8.0) and boosters_after == boosters_before + 1, "claim x2 pays and a full tank adds a booster")
+	g.scrap = 10000
+	check(g.upgrade_condenser() and g.condenser_level() == 2 and Data.condenser_cap_hours(2) > Data.condenser_cap_hours(1), "condenser upgrade raises rate and cap")
+
+	# Boosters and daily drop.
+	g.scrap = 1000
+	var u: int = g.booster_count("undo")
+	check(g.buy_booster("undo") and g.booster_count("undo") == u + 1, "buy a booster")
+	check(g.use_booster("undo") and g.booster_count("undo") == u, "use a booster")
+	g.daily_at = 0.0
+	check(not g.claim_daily().is_empty() and not g.daily_ready(), "daily drop once per cooldown")
+
+	# Save round-trip.
+	var d: Dictionary = JSON.parse_string(JSON.stringify(g.to_dict()))
+	var lv: int = g.level
+	var reg: int = g.region_index
+	g.new_game()
+	g.from_dict(d)
+	check(g.level == lv and g.region_index == reg and g.condenser_level() == 2 and typeof(g.carriages[0]["uid"]) == TYPE_INT, "save round-trip")
+	var old := {"version": 2, "res": {}, "carriages": []}
+	check(int(old["version"]) < Data.SAVE_VERSION, "idle saves (v1/v2) are older than the puzzle save version")

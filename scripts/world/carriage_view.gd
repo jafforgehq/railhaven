@@ -18,6 +18,8 @@ var flash := 0.0
 var hatch := 0.0 # drone bay roof hatch 0 closed .. 1 open
 var docked := 1 # drones visible on pads
 var t := 0.0
+var heat := 0.0 # 0..1 puzzle heat glowing through this carriage
+var frost := 0.0 # fades after a win
 var _crew := {} # sid -> {x, tx, state, timer, face}
 var _sparks: Array = [] # [pos, vel, life]
 
@@ -31,6 +33,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	t += delta
 	flash = maxf(0.0, flash - delta * 2.0)
+	frost = maxf(0.0, frost - delta * 0.5)
 	if uid != 0:
 		var c := Game.carriage(uid)
 		if c.is_empty():
@@ -42,9 +45,9 @@ func _process(delta: float) -> void:
 			var run := Game.drone_run_time()
 			var away := active and phase > 2.0 and phase < run - 2.5
 			hatch = move_toward(hatch, 1.0 if (active and (phase < 4.0 or phase > run - 5.0)) else 0.0, delta * 1.5)
-			docked = 0 if away else Data.drones(level)
+			docked = 0 if away else mini(level, 3)
 	elif type == "dronebay":
-		docked = Data.drones(level)
+		docked = mini(level, 3)
 	# Textures load outside _draw (loading inside a draw call can leave a blank white quad).
 	art("locomotive" if type == "locomotive" else "carriage_%s_%d" % [type, level])
 	_update_crew(delta)
@@ -67,24 +70,14 @@ func _visible_on_screen() -> bool:
 
 # ---------------------------------------------------------------- crew logic
 
+## Decorative crew: how many depends on the carriage type and level.
 func _crew_list() -> Array:
-	if uid == 0:
-		var fake := []
-		var n := Data.slots(type, level) if type != "quarters" else mini(1 + level, 4)
-		for i in n:
-			fake.append({"id": 1000 + i, "role": Data.CARRIAGES[type].get("role", "Engineer"), "look": {"skin": i % 4, "hair": (i * 2 + 1) % 6, "hat": i % 3}})
-		return fake
-	if type == "quarters":
-		# Resting crew are spread over all living quarters.
-		var idle := Game.idle_survivors()
-		var homes := Game.carriages.filter(func(c): return c["type"] == "quarters")
-		var idx := homes.find(Game.carriage(uid))
-		var out := []
-		for i in idle.size():
-			if homes.size() > 0 and i % homes.size() == idx:
-				out.append(idle[i])
-		return out
-	return Game.workers_in(uid)
+	var out := []
+	var role := Data.crew_role(type)
+	for i in Data.crew_count(type, level):
+		out.append({"id": uid * 100 + i, "role": role if type != "quarters" else Data.ROLES_ALL[(uid + i) % Data.ROLES_ALL.size()],
+			"look": {"skin": (uid + i) % 4, "hair": (uid * 3 + i * 2 + 1) % 6, "hat": (uid + i) % 3}})
+	return out
 
 
 func _stations() -> Array:
@@ -97,6 +90,7 @@ func _stations() -> Array:
 		"lab": return [40.0, 100.0, 162.0, 204.0, 72.0]
 		"medbay": return [34.0, 80.0, 126.0, 188.0]
 		"cargo": return [46.0, 104.0, 132.0, 190.0]
+		"condenser": return [60.0, 150.0]
 		"quarters": return [60.0, 120.0, 150.0, 190.0]
 		"locomotive": return [150.0]
 	return [100.0]
@@ -226,10 +220,16 @@ func _draw() -> void:
 		"workshop": glow(Vector2(103.5, -66), 20, Color(1, 0.7, 0.35), 0.22)
 		"cooling": _fx_cooling()
 		"dronebay": _fx_dronebay()
-	if uid != 0 and Game.carriage(uid).get("boost", 0.0) > 0.0:
-		# Overdrive: warm pulsing glow through the whole cabin.
-		var pulse := 0.5 + 0.5 * sin(t * 8.0)
-		glow(Vector2(W * 0.5, -80), 110, Color(1.0, 0.75, 0.3), 0.10 + 0.08 * pulse)
+	if heat > 0.02:
+		# Puzzle heat: red glow and wavering air through the cabin.
+		var pulse := 0.5 + 0.5 * sin(t * (4.0 + heat * 8.0))
+		glow(Vector2(W * 0.5, -80), 120, Color(1.0, 0.35, 0.15), 0.08 + heat * (0.22 + 0.1 * pulse))
+		for k in int(heat * 8.0):
+			var hx := fmod(k * 37.0 + t * 12.0, W - 20.0) + 10.0
+			var hy := FLOOR - fmod(t * 30.0 + k * 19.0, 90.0)
+			draw_circle(Vector2(hx, hy), 1.2, Color(1.0, 0.6, 0.3, 0.35 * heat))
+	if frost > 0.01:
+		glow(Vector2(W * 0.5, -80), 130, Color(0.6, 0.9, 1.0), 0.3 * frost)
 	_draw_crew()
 	for sp in _sparks:
 		draw_circle(sp[0], 0.8, sp[3])
@@ -253,7 +253,7 @@ func _lamp_color() -> Color:
 		"quarters", "workshop": return Color(1.0, 0.8, 0.5)
 		"greenhouse": return Color(1.0, 0.82, 0.95)
 		"medbay": return Color(0.9, 1.0, 1.0)
-		"lab": return Color(0.55, 0.85, 1.0)
+		"lab", "condenser": return Color(0.55, 0.85, 1.0)
 	return Color(0.6, 1.0, 0.95)
 
 
@@ -316,7 +316,7 @@ func _fx_cooling() -> void:
 
 
 func _fx_dronebay() -> void:
-	for p in mini(Data.drones(level), 3):
+	for p in mini(level, 3):
 		var px := 44.0 + p * 64.0
 		glow(Vector2(px, FLOOR - 8), 16, Color(0.25, 0.85, 0.76), 0.18 + 0.12 * sin(t * 3.0 + p))
 		if p < docked:
@@ -372,7 +372,7 @@ func _work_pose(w: Dictionary) -> String:
 	match type:
 		"workshop": return "hammer"
 		"greenhouse": return "tend"
-		"recycler", "cooling", "lab", "medbay": return "panel"
+		"recycler", "cooling", "lab", "medbay", "condenser": return "panel"
 		"cargo": return "carry"
 		"dronebay": return "wrench"
 		"quarters":

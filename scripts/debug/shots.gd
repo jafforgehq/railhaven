@@ -1,6 +1,7 @@
 extends Node
-## Dev-only screenshot tour: godot --path . -- --shots=<dir>
-## Walks every screen and saves PNGs so layouts can be reviewed without a device.
+## Dev-only screenshot tour: godot --path . --resolution 720x1280 -- --shots=<dir> [--regions]
+## Walks the home screen, puzzle states and popups and saves PNGs so layouts can be reviewed
+## without a device. Autosave is off, so the real save is never written.
 
 var dir := ""
 
@@ -9,306 +10,106 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--shots="):
 			dir = a.substr(8)
-		if a == "--soak":
-			# Headless soak: skip the tutorial gate so events fire, then just let the game run.
-			Game.autosave = false
-			Game.new_game()
-			Game.goal_index = 4
-			Game.event_timer = 20.0
-			Game.res["scrap"] = 400.0
-			Game.res["parts"] = 120.0
-			Game.event_started.connect(func(id): print("event ", id))
-			Game.event_ended.connect(func(id): print("event ended ", id))
-			Game.drone_returned.connect(func(_u, a2): print("drone +", int(a2)))
-			return
 	if dir == "":
 		queue_free()
 		return
 	Game.autosave = false
-	if OS.get_cmdline_user_args().has("--gallery"):
-		_gallery.call_deferred()
-	elif OS.get_cmdline_user_args().has("--chars"):
-		_chars.call_deferred()
-	elif OS.get_cmdline_user_args().has("--detour"):
-		_detour.call_deferred()
-	elif OS.get_cmdline_user_args().has("--regions"):
+	if OS.get_cmdline_user_args().has("--regions"):
 		_regions.call_deferred()
-	elif OS.get_cmdline_user_args().has("--events"):
-		_events.call_deferred()
 	else:
 		_tour.call_deferred()
 
 
-func _shot(name: String) -> void:
-	await get_tree().create_timer(0.6).timeout
+func _shot(name: String, wait := 0.6) -> void:
+	await get_tree().create_timer(wait).timeout
 	await RenderingServer.frame_post_draw
 	get_viewport().get_texture().get_image().save_png(dir.path_join(name + ".png"))
 	print("shot ", name)
 
 
-## Every region with its landmark (dormant, then restored) plus the late-game sheets.
-func _regions() -> void:
-	var main: Node = get_parent()
-	await get_tree().create_timer(0.3).timeout
+func _close_all(main: Node) -> void:
 	while not main._modal_stack.is_empty():
 		main.close_modal()
-	Game.new_game()
-	Game.res["scrap"] = 1e6
-	Game.res["parts"] = 1e6
-	Game.res["data"] = 500.0
-	for ci in Data.CHAPTERS.size():
-		Game.chapter = ci
-		Game.chapter_done = false
-		Game.tower_stage = 0
-		for t in ["greenhouse", "cooling", "recycler", "cargo", "lab", "medbay"]:
-			if Game.unlocked(t) and Game.count_type(t) == 0:
-				Game.build(t)
-		for c in Game.carriages:
-			c["level"] = Game.level_cap()
-		while Game.survivors.size() < 8 + ci * 4:
-			Game.survivors.append(Game._make_survivor())
-		Game.auto_assign()
-		Game.distance = Game.landmark_distance()
-		main.world.on_chapter_started()
-		main._rebuild_plates()
-		main.set_tab("journey")
-		await get_tree().create_timer(1.0).timeout
-		await _shot("r%d_%s_journey" % [ci + 1, Data.CHAPTERS[ci]["scenery"]])
-		Game.chapter_done = true
-		main.world._set_cool()
-		main.set_tab("train")
-		await get_tree().create_timer(1.0).timeout
-		await _shot("r%d_%s_restored" % [ci + 1, Data.CHAPTERS[ci]["scenery"]])
-	main.open_research()
-	await _shot("r9_research")
-	main.set_tab("crew")
-	await _shot("r9_crew")
-	get_tree().quit()
-
-
-## Every event popup at its first chapter, plus contracts and achievements.
-func _events() -> void:
-	var main: Node = get_parent()
-	await get_tree().create_timer(0.3).timeout
-	while not main._modal_stack.is_empty():
-		main.close_modal()
-	Game.new_game()
-	Game.chapter = 2
-	Game.res = {"scrap": 3000.0, "parts": 900.0, "food": 400.0, "water": 400.0, "data": 50.0}
-	main.world.on_chapter_started()
-	for id in ["trader", "rail", "ashstorm", "raiders"]:
-		Game.start_event(id)
-		await get_tree().create_timer(0.5).timeout
-		await _shot("e_%s" % id)
-		while not main._modal_stack.is_empty():
-			main.close_modal()
-		Game.event = {}
-	Game.goal_index = 0
-	Game.stats["salvaged"] += 1e6
-	Game.stats["parts_made"] += 1e6
-	main.set_tab("journey")
-	await get_tree().create_timer(0.5).timeout
-	await _shot("e_contracts")
-	Popups.achievements(main)
-	await _shot("e_achievements")
-	get_tree().quit()
+	await get_tree().create_timer(0.2).timeout
 
 
 func _tour() -> void:
 	var main: Node = get_parent()
 	await get_tree().create_timer(0.3).timeout
-	while not main._modal_stack.is_empty():
-		main.close_modal()
-	Game.new_game()
-	main.world.rebuild()
-	main._rebuild_plates()
-	main.set_tab("train")
-	await _shot("01_overview")
-	await _input_checks(main)
-	main.open_carriage(Game.first_of("workshop")["uid"])
-	await _shot("02_workshop")
-	main.open_carriage(Game.first_of("dronebay")["uid"])
-	await get_tree().create_timer(1.5).timeout
-	await _shot("03_dronebay")
-	main.open_build()
-	await _shot("04_build")
-	Game.res["scrap"] = 2000.0
-	Game.res["parts"] = 900.0
-	for t in ["greenhouse", "cooling", "recycler"]:
-		Game.build(t)
-	Game.auto_assign()
-	for i in 6:
-		Game.survivors.append(Game._make_survivor())
-	Game.upgrade(Game.first_of("quarters")["uid"])
-	main.show_train_overview()
-	main.world.focus(Game.first_of("greenhouse")["uid"])
-	await get_tree().create_timer(1.2).timeout
-	await _shot("05_greenhouse_view")
-	main.world.focus(Game.first_of("recycler")["uid"])
-	await get_tree().create_timer(1.2).timeout
-	await _shot("06_recycler_view")
-	main.set_tab("crew")
-	await _shot("07_crew")
-	Popups.assign(main, Game.survivors[5]["id"])
-	await _shot("08_assign")
-	main.close_modal()
-	main.set_tab("journey")
-	await _shot("09_journey")
-	Game.distance = Game.landmark_distance()
-	await _shot("10_journey_range")
-	main.set_tab("train")
-	Game.start_event("heatwave")
-	await get_tree().create_timer(2.5).timeout
-	await _shot("11_heatwave")
-	main.close_modal()
-	Game.choose_event("b")
-	await get_tree().create_timer(1.0).timeout
-	await _shot("12_safe_mode")
-	Game.event = {}
-	Game.start_event("sandstorm")
-	main.close_modal()
-	await get_tree().create_timer(3.0).timeout
-	await _shot("13_sandstorm")
-	Game.event = {}
-	Game.pending_report = {"seconds": 12000.0, "gains": {"scrap": 420.0, "parts": 120.0, "food": 180.0, "water": -20.0},
-		"survivors": 2, "distance": 900.0, "safe_mode": true, "rationing": false, "stages": 0}
-	main._on_offline_report(Game.pending_report)
-	await _shot("14_offline")
-	main.close_modal()
-	Popups.goals(main)
-	await _shot("15_goals")
-	main.close_modal()
-	Popups.settings(main)
-	await _shot("16_settings")
-	main.close_modal()
-	Game.chapter_done = true
-	main._on_chapter_complete()
-	await _shot("17_tower")
-	get_tree().quit()
-
-
-func _push(ev: InputEvent) -> void:
-	get_viewport().push_input(ev, true)
-	await get_tree().process_frame
-
-
-func _mouse(pos: Vector2, pressed: bool) -> InputEventMouseButton:
-	var e := InputEventMouseButton.new()
-	e.button_index = MOUSE_BUTTON_LEFT
-	e.pressed = pressed
-	e.position = pos
-	e.global_position = pos
-	return e
-
-
-## Simulated touch: tap a carriage opens its panel; horizontal drag pans the camera.
-func _input_checks(main: Node) -> void:
-	var uid: int = Game.first_of("quarters")["uid"]
-	main.world.focus(uid)
-	await get_tree().create_timer(1.0).timeout
-	var p: Vector2 = main.world.world_to_screen(main.world.carriage_center(uid))
-	await _push(_mouse(p, true))
-	await _push(_mouse(p, false))
-	await get_tree().create_timer(0.3).timeout
-	print("CHECK tap opens carriage panel: ", main.current is CarriagePanel and main.current.uid == uid)
-	main.show_train_overview()
-	var cam_before: float = main.world.camera.position.x
-	var start := Vector2(600, p.y)
-	await _push(_mouse(start, true))
-	for i in 12:
-		var m := InputEventMouseMotion.new()
-		m.position = start - Vector2(30 * (i + 1), 0)
-		m.global_position = m.position
-		m.relative = Vector2(-30, 0)
-		m.button_mask = MOUSE_BUTTON_MASK_LEFT
-		await _push(m)
-	await _push(_mouse(start - Vector2(360, 0), false))
-	await get_tree().create_timer(0.3).timeout
-	print("CHECK drag pans camera: ", main.world.camera.position.x > cam_before + 100, " (", cam_before, " -> ", main.world.camera.position.x, ")")
-	print("CHECK drag did not open a panel: ", main.current is OverviewPanel)
-
-
-## Every carriage type at levels 1, 3 and 5 in one image.
-func _gallery() -> void:
-	var main: Node = get_parent()
-	await get_tree().create_timer(0.3).timeout
-	while not main._modal_stack.is_empty():
-		main.close_modal()
-	var bg := ColorRect.new()
-	bg.color = Color("101318")
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	main.modal_layer.add_child(bg)
-	var grid := GridContainer.new()
-	grid.columns = 3
-	bg.add_child(grid)
-	for t in ["locomotive"] + Data.BUILDABLE:
-		for l in [1, 3, 5]:
-			grid.add_child(Preview.make(t, l, 0.95))
-	await _shot("gallery")
-	get_tree().quit()
-
-
-class CharSheet extends Control:
-	var t := 0.0
-	func _ready() -> void:
-		texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	func _process(d: float) -> void:
-		t += d
-		queue_redraw()
-	func _draw() -> void:
-		draw_rect(Rect2(Vector2.ZERO, size), Color("1d4a4c"))
-		var presets: Array = CrewSprites.meta()["presets"]
-		var anims := ["idle", "walk", "carry", "hammer", "tend", "panel", "wrench", "sit"]
-		for i in presets.size():
-			var p := Vector2(70 + (i % 5) * 140, 260 + (i / 5) * 300)
-			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-			draw_set_transform(p, 0.0, Vector2(4, 4))
-			var m := CrewSprites.meta()
-			var row: int = m["anims"].find(anims[i % anims.size()])
-			var col := int(t * 8.0) % int(m["counts"][anims[i % anims.size()]])
-			draw_texture_rect_region(CrewSprites.tex(presets[i]), Rect2(-CrewSprites.FEET * 0.25, Vector2(40, 50)), Rect2(col * 160, row * 200, 160, 200))
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
-
-func _chars() -> void:
-	var main: Node = get_parent()
-	await get_tree().create_timer(0.3).timeout
-	while not main._modal_stack.is_empty():
-		main.close_modal()
-	var sheet := CharSheet.new()
-	sheet.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	main.modal_layer.add_child(sheet)
-	var row := UIKit.hbox(8)
-	row.position = Vector2(10, 1080)
-	sheet.add_child(row)
-	for k in 5:
-		var p := Portrait.new()
-		p.look = {"skin": k % 4, "hair": k, "hat": k % 3}
-		p.role = Data.ROLES[k % Data.ROLES.size()]
-		p.custom_minimum_size = Vector2(130, 130)
-		row.add_child(p)
-	await _shot("chars")
-	get_tree().quit()
-
-
-## Regression view: recycler built before the greenhouse goal; the coach must send the
-## player to build a Cooling Module instead of dead-ending.
-func _detour() -> void:
-	var main: Node = get_parent()
-	await get_tree().create_timer(0.3).timeout
-	while not main._modal_stack.is_empty():
-		main.close_modal()
+	await _close_all(main)
 	Game.new_game()
 	Game.intro_seen = true
-	Game.res["scrap"] = 400.0
-	Game.res["parts"] = 120.0
-	Game.goal_index = 2
-	Game.build("recycler")
-	main.world.rebuild()
-	main._rebuild_plates()
-	main.show_train_overview()
-	await _shot("detour_overview")
-	main.open_build()
-	await get_tree().create_timer(0.8).timeout
-	await _shot("detour_build")
+	main.world.on_region_started()
+	main.show_home()
+	await _shot("01_home")
+	main.play()
+	await _shot("02_level1")
+	# Tutorial: lift the first tank.
+	main.puzzle.view._tap(0)
+	await _shot("03_level1_lifted", 0.4)
+	main.puzzle.view._tap(2)
+	await _shot("04_level1_poured", 0.8)
+	# Win level 1 by solving it.
+	for m in [[1, 0], [1, 2], [0, 1], [0, 2]]:
+		main.puzzle.view._tap(m[0])
+		main.puzzle.view._tap(m[1])
+		await get_tree().create_timer(0.45).timeout
+	await _shot("05_win", 1.8)
+	await _close_all(main)
+	main.show_home()
+	Game.parts = 3
+	main._refresh()
+	await _shot("06_home_restore")
+	Game.complete_task()
+	await _shot("07_restored", 1.0)
+	# A bigger level: two rows, some ash-covered canisters.
+	Game.level = 45
+	main.play()
+	await _shot("08_level45", 0.8)
+	main.puzzle.heat = 64.0
+	await _shot("09_hot", 0.5)
+	main.puzzle.heat = Data.HEAT_MAX
+	main.puzzle._overheat()
+	await _shot("10_overheated", 1.2)
+	await _close_all(main)
+	main.show_home()
+	Game.condenser_at = Game.now() - 6 * 3600.0
+	Popups.condenser(main)
+	await _shot("11_condenser")
+	await _close_all(main)
+	Popups.shop(main)
+	await _shot("12_shop")
+	await _close_all(main)
+	Game.lives = 0
+	main._refresh()
+	Popups.out_of_lives(main)
+	await _shot("13_no_lives")
+	await _close_all(main)
+	Game.lives = Data.MAX_LIVES
+	Game.parts = 99
+	while not Game.region_done:
+		Game.complete_task()
+	await _shot("14_region_done", 1.5)
+	await _close_all(main)
+	main._refresh()
+	await _shot("15_home_depart")
+	get_tree().quit()
+
+
+## Every region's home screen with its landmark restored.
+func _regions() -> void:
+	var main: Node = get_parent()
+	await get_tree().create_timer(0.3).timeout
+	await _close_all(main)
+	Game.new_game()
+	Game.intro_seen = true
+	Game.parts = 999
+	for r in Data.REGIONS.size():
+		while not Game.region_done:
+			Game.complete_task()
+		await _close_all(main)
+		main.show_home()
+		await _shot("r%d_%s" % [r + 1, Game.region()["scenery"]], 1.2)
+		if not Game.advance_region():
+			break
 	get_tree().quit()

@@ -29,14 +29,17 @@ static func make(k: String, size := 28.0, col := Color(0, 0, 0, 0)) -> Icon:
 
 const ART := ["arrow", "bulb", "scrap", "parts", "food", "water", "crew", "home", "cooling", "drone", "train", "tower",
 	"wrench", "hammer", "bed", "shield", "sun", "temp", "map", "star", "warning",
-	"data", "flask", "medkit", "crate", "raider", "trade", "rail", "ash", "desal", "mirror", "archive", "haven", "trophy"]
+	"data", "flask", "medkit", "crate", "raider", "trade", "rail", "ash", "desal", "mirror", "archive", "haven", "trophy",
+	"heart", "snowflake", "undo", "tank", "condenser", "play", "gift"]
 static var _art := {}
 
 
 ## Blender-rendered icons (art/blender/icons.py); loaded once, never inside a draw call.
 static func preload_art() -> void:
 	for k in ART:
-		_art[k] = load("res://assets/sprites/icons/icon_%s.png" % k)
+		var p := "res://assets/sprites/icons/icon_%s.png" % k
+		if ResourceLoader.exists(p): # icons still being rendered fall back to vector glyphs
+			_art[k] = load(p)
 
 
 func _ready() -> void:

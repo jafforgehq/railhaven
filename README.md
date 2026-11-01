@@ -1,12 +1,11 @@
 # Railhaven: Scorched Line
 
-Portrait mobile idle colony game (Godot 4.7, GDScript, Mobile renderer with 4x MSAA 2D, falls back to OpenGL).
-Outside it is 60–68 °C depending on the region; the colony lives aboard an armored train that never stops.
-The journey runs through five regions and takes roughly 20+ hours of game time (see Test).
-All art is made in **Blender** from Python scripts in `art/blender/`: toon-shaded, outlined models rendered
-orthographically to sprites (crew animations and portraits, every carriage type at levels 1–10, the locomotive,
-wheels and rods, drones, scenery strips per region, five landmarks, item icons). Godot only adds in-engine effects on top:
-lamp light cones, glows, sparks, bubbles, smoke, dust and weather tints.
+Portrait mobile **coolant-sort puzzle** game with a train-restoration meta (Godot 4.7, GDScript,
+Mobile renderer with 4x MSAA 2D). The world is 60–68 °C; the colony lives on an armored train.
+Every level is a carriage overheating: sort coloured coolant canisters into one-colour tanks before the
+heat gauge reaches 70 °C. Wins earn parts that restore the train, region by region, and each region ends
+by restoring a landmark. The idle colony version is preserved at git tag `v0.1-idle`.
+All art is made in **Blender** from Python scripts in `art/blender/`.
 
 ## Art pipeline (Blender only)
 
@@ -38,55 +37,51 @@ Tap the goal card to jump to wherever the current goal is solved.
 
 ## Core loop
 
-Drones salvage scrap automatically → the workshop turns scrap into parts (2:1) → build / upgrade carriages →
-more beds, food and water → survivors arrive → more workers → more production → restore the region's landmark →
-depart for the next region.
+Play a level → seal tanks to cool the carriage → win parts + scrap → RESTORE the next task on the train
+(build or upgrade a carriage) → the last task restores the region's landmark → depart to the next region.
 
-| Carriage | Effect |
-|---|---|
-| Locomotive | Cargo hold (storage multiplier) and journey speed |
-| Living Quarters | Beds (survivor capacity); resting crew sleep and eat here |
-| Greenhouse | Food per worker |
-| Water Recycler | Water per worker |
-| Workshop | Converts scrap into parts per worker |
-| Cooling Module | Raises how many carriages the train can support (+1 when staffed) |
-| Drone Bay | Drones repeat salvage runs automatically; pilots add +25% yield each |
-| Cargo Hold (ch 2) | Storage for every resource (grows ×2 per level, so costs always fit) |
-| Research Lab (ch 2) | Scientists make data; data + parts buy research (one project at a time) |
-| Med Bay (ch 3) | Medics give the whole train up to +60% efficiency and faster arrivals |
+- **Puzzle rules** (`scripts/puzzle/board.gd`): tanks hold 4 canisters. Tap a tank to lift its top run
+  of one colour, tap another tank to pour onto the same colour or into an empty tank. A full one-colour
+  tank seals. Ash-covered canisters (from level 31) stay hidden until exposed.
+- **Heat**: each pour heats the carriage by (70 − 30) / move budget; sealing a tank cools 2 °C, and
+  seals chained within 3 s make a **cold snap** (3 °C more per link). At 70 °C the level is lost: pay
+  scrap or watch an ad to cool 15 °C, or give up (costs a life). Every 10th level is a heatwave level
+  (one more colour, double parts).
+- **Levels**: 300 authored levels in `data/levels.json`, generated and proven solvable by
+  `python3 tools/gen_levels.py` (deterministic). Past 300 they repeat with shuffled colours.
+- **Boosters**: Undo, Spare Tank (adds an empty tank), Heat Flush (−12 °C). Bought with scrap.
+- **Lives**: 5, one back every 20 min; refill with scrap or a rewarded ad.
+- **Condenser** (dedicated offline carriage): turns cool night air into scrap while you are away,
+  8 h cap rising to 24 h with upgrades; a full tank adds a booster; ad doubles the claim.
+- **Cooling Core**: each level of it starts every puzzle 1 °C cooler.
+- **Daily drop**, settings (music, SFX, vibration), how-to-play, a level-1 coach tutorial.
+- **Ads**: `scripts/autoloads/ads.gd` is a stub that grants rewards in test builds; plug AdMob in there.
+- **Saves**: JSON v3. Idle-version saves are kept as `railhaven_save.json.idle.bak`.
 
-| Chapter | Region | Landmark | Temp | Level cap | Train | Region bonus |
-|---|---|---|---|---|---|---|
-| 1 | Scorched Desert | Climate Tower | 65 °C | 5 | 10 | – |
-| 2 | Ash Coast | Desalination Works | 62 °C | 6 | 12 | +25% water |
-| 3 | Glass Flats | Mirror Array | 68 °C | 7 | 15 | +20% parts |
-| 4 | Drowned City | Seed Archive | 64 °C | 8 | 17 | +30% scrap |
-| 5 | Green Highlands | Haven | 60 °C | 10 | 20 | +30% food |
-
-- Each survivor eats and drinks 0.6/min. Matching specialists (Engineer → Workshop, Scientist → Lab, Medic → Med Bay, …) work at 125%.
-- **Crew levels**: workers gain experience while working (Lv 1–10, +6% output per level).
-- **Research**: 24 permanent projects (drone haul, output, storage, upkeep, cost, offline time, XP, …), unlocked by chapter.
-- **Supply contracts**: three side tasks with rewards (after the tutorial); a claimed slot offers a new one after 30 min of play.
-- **Achievements**: 22 milestones with automatic rewards (Journey → Achievements).
-- **Overdrive**: tap in a producing carriage to double its output for 60 s (10 min cooldown).
-- **Automatic safe mode**: if food or water runs out, the crew rations (half upkeep, production −30%, growth paused). Nobody dies, online or offline.
-- **Offline**: on launch / resume the sim fast-forwards up to 8 h (more with research) in 5 s steps with the same rules and shows a "While you were away" report.
-- **Events**: Heatwave, Sandstorm, Distress Signal, then Trader, Broken Rail, Ash Storm (ch 2+) and Raiders (ch 3+). Each is a two-option choice; costs scale per chapter; no answer within 25 s picks the safe option.
-- **Saves**: JSON, versioned (v2). v1 saves load into chapter 1 and can depart for chapter 2.
+| Region | Landmark | Tasks | Parts |
+|---|---|---|---|
+| Scorched Desert | Climate Tower | 8 | 22 |
+| Ash Coast | Desalination Works | 9 | 37 |
+| Glass Flats | Mirror Array | 9 | 46 |
+| Drowned City | Seed Archive | 9 | 55 |
+| Green Highlands | Haven | 9 | 65 |
 
 ## Layout
 
 ```
-scripts/data.gd                 balance + static definitions (class Data)
-scripts/autoloads/game.gd       state owner: sim, actions, events, goals, JSON save, offline catch-up
-scripts/autoloads/audio.gd      Music/SFX/Ambience buses, SFX pool, settings (ConfigFile)
-scripts/main.gd                 root: half-res world SubViewport, HUD, bottom sheets, modals
-scripts/world/                  parallax scenery, carriage + locomotive cutaways, drones, weather
-scripts/world/crew_sprites.gd   draws Blender crew frames (lazy-loaded sheets)
-scripts/ui/                     theme/kit, icons, HUD, portraits, popups, panels/
-tests/test_sim.gd               headless economy checks
-tests/bot_playthrough.gd        greedy bot plays chapter 1 headless (pacing check)
-scripts/debug/shots.gd          dev-only screenshot tour (`-- --shots=<dir>`), soak (`-- --soak`)
+scripts/data.gd                 economy, boosters, Condenser, regions + restoration tasks (class Data)
+scripts/autoloads/game.gd       progress owner: tasks, lives, currencies, Condenser, levels, JSON save
+scripts/autoloads/ads.gd        rewarded-ad facade (test stub until AdMob is linked)
+scripts/autoloads/audio.gd      Music/SFX/Ambience buses, SFX pool, haptics, settings (ConfigFile)
+scripts/puzzle/board.gd         pure sort rules (SortBoard): pour, ash reveal, undo, win/stuck
+scripts/puzzle/puzzle_view.gd   draws tanks + canisters, tap input, pour arcs, seals
+scripts/puzzle/puzzle_screen.gd one level: heat gauge, cold snaps, boosters, win/overheat flow
+scripts/main.gd                 root: Home (HUD + home sheet) / Puzzle modes, modals, toasts, coach
+scripts/ui/                     theme/kit, icons, HUD, home sheet, popups, coach
+scripts/world/                  parallax scenery, carriage + locomotive cutaways, drones, heat glow
+tools/gen_levels.py             level generator + solver -> data/levels.json
+tests/test_puzzle.gd            headless rules / level data / progress checks
+scripts/debug/shots.gd          dev-only screenshot tour (`-- --shots=<dir>` [--regions])
 ```
 
 Patterns (chosen / rejected):
@@ -97,17 +92,18 @@ Patterns (chosen / rejected):
 - World lives in the main viewport (camera zoom 1.7–2.5, auto-fit between HUD and sheet) with UI in a CanvasLayer, **not** a low-res SubViewport: art stays sharp at any phone resolution.
 - `canvas_items` stretch + `keep_width` aspect so tall phones get more world, not letterboxing.
 - Panels build controls once and refresh values in place, **not** rebuild every tick (buttons would be recreated under the finger).
+- The puzzle board is one custom-drawn `Control` (hit-testing + tweened pours), **not** one node per tank in containers (flying canisters between containers is awkward).
+- Levels are generated offline and proven solvable by a solver, **not** generated at runtime (deterministic, testable, no stalls on device).
 
 ## Test
 
 ```bash
 G=/Applications/Godot.app/Contents/MacOS/Godot
-$G --headless --path . -s tests/test_sim.gd          # economy self-check, prints PASS/FAILED
-$G --headless --path . -s tests/bot_playthrough.gd   # pacing of the whole journey (add "-- quiet" / "passive")
-$G --path . -- --shots=/tmp/railhaven_shots --regions    # every region + landmark, research and crew sheets
+$G --headless --path . -s tests/test_puzzle.gd       # rules, level data, progress systems; PASS/FAILED
+python3 tools/gen_levels.py                          # regenerate data/levels.json (all levels solved)
+$G --path . --resolution 720x1280 -- --shots=/tmp/railhaven_shots             # home, puzzle and popup screens
+$G --path . --resolution 720x1280 -- --shots=/tmp/railhaven_shots --regions   # every region
 $G --path . -- --shots=/tmp/railhaven_shots              # screenshot every screen + simulated tap/drag checks
-$G --path . -- --shots=/tmp/railhaven_shots --gallery    # every carriage type at Lv 1/3/5
-$G --path . -- --shots=/tmp/railhaven_shots --chars      # every crew preset + portraits
 ```
 
 The screenshot tour plays on the real save slot with autosave off. It never writes the save, except through `reset_game()`.

@@ -207,7 +207,7 @@ static func bar(value: float, color: Color, h := 10.0) -> ProgressBar:
 static func cost_row(cost: Dictionary, size := 24) -> HBoxContainer:
 	var row := hbox(14)
 	for k in cost:
-		var have: float = Game.res.get(k, 0.0)
+		var have: float = Game.scrap if k == "scrap" else (Game.parts if k == "parts" else 0.0)
 		var l := label(str(int(cost[k])), "Value")
 		l.add_theme_font_size_override("font_size", size)
 		if have < cost[k]:
