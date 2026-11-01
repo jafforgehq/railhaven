@@ -333,7 +333,7 @@ static func settings(main: Node) -> void:
 		cb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		rows.append(UIKit.hbox(10, [Icon.make(s[1], 28, UIKit.TEAL), cb]))
 	v.add_child(UIKit.panel("Card", UIKit.vbox(6, rows)))
-	v.add_child(UIKit.wrap_label("Railhaven: Scorched Line. Music: \"Lone Scavenger\" by vitalezzz (CC0). Fanfare: \"Smooth Guitar Fanfare\" by OwlishMedia (CC BY 4.0). Wind: \"Wind Loop\" by AntumDeluge from InspectorJ (CC BY 3.0). SFX: Kenney, Wikimedia Commons and OpenGameArt contributors (CC0). Font: Barlow Condensed (OFL). Full list in assets/audio/CREDITS.md.", "Small"))
+	v.add_child(UIKit.wrap_label("Railhaven: Scorched Line v%s. Music: \"Lone Scavenger\" by vitalezzz (CC0). Fanfare: \"Smooth Guitar Fanfare\" by OwlishMedia (CC BY 4.0). Wind: \"Wind Loop\" by AntumDeluge from InspectorJ (CC BY 3.0). SFX: Kenney, Wikimedia Commons and OpenGameArt contributors (CC0). Font: Barlow Condensed (OFL). Full list in assets/audio/CREDITS.md." % ProjectSettings.get_setting("application/config/version", "dev"), "Small"))
 	var how := UIKit.button("HOW TO PLAY", "", "bulb", 58)
 	v.add_child(how)
 	var reset := UIKit.button("RESET PROGRESS", "RedButton", "warning", 58)
