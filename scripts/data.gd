@@ -81,7 +81,7 @@ const TOWER_STAGES := [
 		"req": {"dronebay": 2}, "desc": "Drones carry parts to the tower and patch its relays."},
 	{"name": "Flush the coolant lines", "cost": {"parts": 120, "water": 60}, "time": 90.0,
 		"req": {"cooling": 1, "survivors": 10}, "desc": "Pump recycled water through the frozen coolant loop."},
-	{"name": "Reboot the climate core", "cost": {"parts": 200, "water": 80}, "time": 120.0,
+	{"name": "Reboot the climate core", "cost": {"parts": 200, "water": 50}, "time": 120.0,
 		"req": {"dronebay": 3, "workshop": 3}, "desc": "A full drone squadron restarts the core remotely."},
 ]
 
@@ -104,7 +104,7 @@ const EVENTS := {
 		"title": "HEATWAVE AHEAD", "sub": "Extreme temperatures incoming",
 		"text": "A heatwave will push outside temperatures to 78°C. Choose how to prepare.",
 		"duration": 120.0,
-		"a": {"label": "BOOST COOLING", "title": "Boost cooling", "desc": "Run the exchangers hard to keep full operations.", "cost": {"water": 40}, "effect": "Full production", "icon": "cooling"},
+		"a": {"label": "BOOST COOLING", "title": "Boost cooling", "desc": "Run the exchangers hard to keep full operations.", "cost": {"water": 25}, "effect": "Full production", "icon": "cooling"},
 		"b": {"label": "SAFE MODE", "title": "Safe mode", "desc": "Reduce load and prioritise crew safety.", "cost": {}, "effect": "Production -30%", "icon": "shield"},
 	},
 	"sandstorm": {

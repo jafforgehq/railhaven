@@ -470,6 +470,18 @@ func stage_block_reason() -> String:
 	return ""
 
 
+## What the next tower stage still lacks, in plain words ("" when affordable).
+func stage_shortfall() -> String:
+	if tower_stage >= Data.TOWER_STAGES.size():
+		return ""
+	var cost: Dictionary = Data.TOWER_STAGES[tower_stage]["cost"]
+	var where := {"water": "Water Recycler", "food": "Greenhouse", "parts": "Workshop", "scrap": "Drone Bay"}
+	for k in cost:
+		if res[k] < cost[k]:
+			return "Needs %d more %s: staff or upgrade the %s" % [ceili(cost[k] - res[k]), Data.RES_NAMES[k].to_lower(), where[k]]
+	return ""
+
+
 func start_expedition() -> bool:
 	if stage_block_reason() != "":
 		return false

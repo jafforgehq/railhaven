@@ -61,7 +61,7 @@ func refresh() -> void:
 		_build_stages()
 	if is_instance_valid(_launch):
 		_launch.disabled = why != ""
-		_launch_reason.text = why
+		_launch_reason.text = Game.stage_shortfall() if why == "Not enough resources" else why
 		UIKit.clear(_launch_cost)
 		_launch_cost.add_child(UIKit.cost_row(Data.TOWER_STAGES[mini(Game.tower_stage, 2)]["cost"], 24))
 	_goals_btn.get_meta("label").text = "CHAPTER GOALS  %d/%d" % [mini(Game.goal_index, Data.GOALS.size()), Data.GOALS.size()]

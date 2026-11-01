@@ -104,6 +104,8 @@ func _initialize() -> void:
 		g.upgrade(g.first_of("workshop")["uid"])
 	while g.survivors.size() < 10:
 		g.survivors.append(g._make_survivor())
+	g.res["parts"] = 0.0
+	check(g.stage_shortfall().begins_with("Needs ") and "parts" in g.stage_shortfall(), "tower shortfall names the missing resource")
 	for i in 3:
 		g.res["parts"] = 5000.0
 		g.res["water"] = 5000.0
