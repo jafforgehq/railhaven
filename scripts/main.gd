@@ -20,6 +20,7 @@ var _home_root: Control
 var story: StoryBubble
 var rail: VBoxContainer # event / album buttons down the right edge (home)
 var _rail_btns := {}
+var _pending_events: Array = [] # event results shown once the player is home
 var _last_band_bottom := -1.0
 var _refresh_accum := 0.0
 
@@ -47,6 +48,9 @@ func _ready() -> void:
 	rail = UIKit.vbox(8)
 	rail.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_home_root.add_child(rail)
+	_rail_button("rescue", "warning", "RESCUE!", func(): play_rescue())
+	_rail_button("run", "streak", "HEAT RUN", func(): MetaPopups.heat_run(self))
+	_rail_button("race", "flag", "RACE", func(): MetaPopups.race(self))
 	_rail_button("album", "card", "ALBUM", func(): MetaPopups.album(self))
 
 	toasts = UIKit.vbox(6)
@@ -70,6 +74,7 @@ func _ready() -> void:
 	Game.carriage_upgraded.connect(func(_uid): say("upgraded"))
 	Game.region_started.connect(func(i): say("region_%d" % i))
 	Game.region_complete.connect(func(): say("landmark"))
+	Meta.event_result.connect(func(kind, info): _pending_events.append([kind, info]))
 	Game.region_complete.connect(_on_region_complete)
 	Game.region_started.connect(func(_i): world.on_region_started(); _rebuild_plates(); _refresh())
 	world.tapped_carriage.connect(func(uid):
@@ -175,6 +180,32 @@ func play(pre: Array = [], boss := false) -> void:
 	Audio.play("ui_open")
 
 
+## Pull-the-pin rescue mission: runs over the whole screen, no lives at stake.
+func play_rescue() -> void:
+	if not Meta.rescue_pending():
+		return
+	mode = "rescue"
+	coach.point(Vector2.ZERO, "")
+	_home_root.visible = false
+	overlay.visible = false
+	var game := RescueGame.new()
+	game.main = self
+	game.layout = Meta.rescue_index()
+	add_child(game)
+	move_child(game, toasts.get_index())
+	game.finished.connect(func(won: bool):
+		game.queue_free()
+		show_home()
+		if won:
+			Meta.rescue_won()
+			Audio.play("goal_complete")
+			show_toast("Crew rescued! %s" % Meta.reward_text(Meta.RESCUE_REWARD), "good")
+			world.pet.cheer()
+		else:
+			show_toast("The rescue is still waiting. Try again any time.", "info"))
+	Audio.play("alarm", 0.1)
+
+
 ## The carriage the next task is about (or a random carriage to cool). At home a carriage
 ## still being assembled is the ghost (-1); a puzzle always heats a real carriage.
 func _focus_uid(for_heat := false) -> int:
@@ -235,6 +266,24 @@ func _process(delta: float) -> void:
 func _refresh() -> void:
 	hud.refresh()
 	home.refresh()
+	_refresh_rail()
+	if mode == "home" and _modal_stack.is_empty() and not _pending_events.is_empty():
+		var e: Array = _pending_events.pop_front()
+		MetaPopups.event_result(self, e[0], e[1])
+
+
+func _refresh_rail() -> void:
+	var run := Meta.run()
+	_rail_btns["run"][0].get_parent().visible = Meta.run_open()
+	_rail_btns["run"][1].text = ("RUN %d/%d" % [int(run["wins"]), Meta.RUN_STEPS]) if run["state"] == "running" else ("JOIN!" if Meta.run_can_join() else "HEAT RUN")
+	_rail_btns["race"][0].get_parent().visible = Meta.race_open()
+	if Meta.race_open():
+		_rail_btns["race"][1].text = "RACE #%d" % Meta.race_rank()
+	_rail_btns["album"][1].text = "ALBUM %d" % Meta.cards().size()
+	var rescue_was: bool = _rail_btns["rescue"][0].get_parent().visible
+	_rail_btns["rescue"][0].get_parent().visible = Meta.rescue_pending()
+	if Meta.rescue_pending() and not rescue_was:
+		say("rescue")
 
 
 func _on_changed() -> void:

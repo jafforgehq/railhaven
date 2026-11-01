@@ -4,6 +4,23 @@ extends Node
 ## All state lives in Game.meta (a plain Dictionary), so it saves with the rest of the game.
 
 signal changed
+signal event_result(kind: String, info: Dictionary) # Heat Run finished, race week settled
+
+
+func _ready() -> void:
+	Game.level_won.connect(_on_won)
+	Game.level_lost.connect(_on_lost)
+
+
+func _on_won(reward: Dictionary) -> void:
+	_heat_run_step(true)
+	if not reward.get("boss", false) and int(reward.get("level", 0)) % RESCUE_EVERY == 0:
+		m()["rescue_pending"] = true
+	_race_add(3 if reward.get("boss", false) else (2 if reward.get("hard", false) else 1))
+
+
+func _on_lost() -> void:
+	_heat_run_step(false)
 
 # ---------------------------------------------------------------- pre-level boosters & streak
 
@@ -167,6 +184,7 @@ const STORY := {
 	"region_4": "The Green Highlands. Cool air, real soil. This could be home.",
 	"landmark": "We did it. Feel that breeze? That's the landmark running again.",
 	"boss": "This one's guarded by the worst heat yet. Keep your head cool.",
+	"rescue": "Mayday! One of the crew is cooking in the boiler room. Pull the right valves and get coolant to that pod!",
 }
 const UPGRADE_LINES := [
 	"Another upgrade. She's starting to look like a real train again.",
@@ -185,7 +203,7 @@ func story_line(key: String) -> String:
 	if not STORY.has(key):
 		return ""
 	var seen: Dictionary = m().get("story", {})
-	if seen.has(key) and key not in ["landmark", "boss"]:
+	if seen.has(key) and key not in ["landmark", "boss", "rescue"]:
 		return ""
 	seen[key] = true
 	m()["story"] = seen
@@ -294,3 +312,210 @@ func roll_card(force := false) -> Dictionary:
 	Game.save_game()
 	changed.emit()
 	return out
+
+
+# ---------------------------------------------------------------- Heat Run (Lava Quest style)
+
+## Win 7 levels in a row against 99 simulated crews; one loss and you are out. The survivors
+## split the pool. Opens from level 20; a new run can start an hour after the last one ends.
+const RUN_FROM_LEVEL := 20
+const RUN_STEPS := 7
+const RUN_CREWS := 100
+const RUN_POOL := 10000
+const RUN_SURVIVE := 0.72 # chance a simulated crew wins each step
+const RUN_COOLDOWN := 3600.0
+
+
+func run() -> Dictionary:
+	return m().get("run", {"state": "idle"})
+
+
+func run_open() -> bool:
+	return Game.level >= RUN_FROM_LEVEL
+
+
+func run_can_join() -> bool:
+	var r := run()
+	return run_open() and (r["state"] == "idle" or (r["state"] in ["won", "lost"] and Game.now() >= float(r.get("next_at", 0))))
+
+
+## Survivors after each step (index 0 = start), fixed when the run starts.
+static func run_survivors(seed: int) -> Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var alive := RUN_CREWS - 1 # simulated crews; the player is added on top
+	var out := [RUN_CREWS]
+	for k in RUN_STEPS:
+		var next := 0
+		for i in alive:
+			if rng.randf() < RUN_SURVIVE:
+				next += 1
+		alive = next
+		out.append(alive + 1)
+	return out
+
+
+func run_join() -> bool:
+	if not run_can_join():
+		return false
+	var seed := int(Game.now())
+	m()["run"] = {"state": "running", "wins": 0, "seed": seed, "survivors": run_survivors(seed)}
+	Game.save_game()
+	changed.emit()
+	return true
+
+
+## Share of the pool for finishing the run with `alive` crews (including the player).
+static func run_prize(alive: int) -> int:
+	return maxi(100, RUN_POOL / maxi(1, alive))
+
+
+func _heat_run_step(won: bool) -> void:
+	var r := run()
+	if r["state"] != "running":
+		return
+	if not won:
+		r["state"] = "lost"
+		r["next_at"] = Game.now() + RUN_COOLDOWN
+		event_result.emit("run_lost", r)
+	else:
+		r["wins"] = int(r["wins"]) + 1
+		if r["wins"] >= RUN_STEPS:
+			var alive: int = r["survivors"][RUN_STEPS]
+			var prize := run_prize(alive)
+			Game.scrap += prize
+			r["state"] = "won"
+			r["prize"] = prize
+			r["next_at"] = Game.now() + RUN_COOLDOWN
+			event_result.emit("run_won", r)
+	m()["run"] = r
+	changed.emit()
+
+
+# ---------------------------------------------------------------- weekly race (King's Cup style)
+
+## A week-long leaderboard against 19 simulated crews: every win scores (heatwave 2, boss 3).
+## Bots score at their own pace through the week. Top places pay when the week rolls over.
+const RACE_FROM_LEVEL := 10
+const RACE_BOTS := ["Dune Rats", "Rail Hawks", "Cinder Crew", "Ash Walkers", "Mirage Line", "Sun Dogs", "Copper Wheels",
+	"Night Haulers", "Glass Wolves", "Salt Riders", "Ember Kids", "Iron Larks", "Dust Devils", "Tin Owls",
+	"Cool Heads", "Far Signal", "Last Stop", "Red Valve", "Sand Swifts"]
+const RACE_PRIZES := [
+	{"scrap": 2000, "pre_tank": 2, "pre_cool": 2, "undo": 2},
+	{"scrap": 1200, "pre_tank": 1, "undo": 1},
+	{"scrap": 700, "pre_cool": 1},
+]
+const RACE_TOP10 := {"scrap": 200}
+const WEEK := 604800.0
+const WEEK_OFFSET := 345600.0 # unix week 0 starts on a Thursday; shift weeks to start Monday
+
+
+static func week_of(t: float) -> int:
+	return int(floor((t - WEEK_OFFSET) / WEEK))
+
+
+static func week_end(week: int) -> float:
+	return (week + 1) * WEEK + WEEK_OFFSET
+
+
+func race_open() -> bool:
+	return Game.level >= RACE_FROM_LEVEL
+
+
+func race() -> Dictionary:
+	var r: Dictionary = m().get("race", {})
+	var wk := week_of(Game.now())
+	if r.get("week", wk) != wk:
+		_race_settle(r) # the week rolled over since the last look
+		r = {}
+	if r.is_empty():
+		r = {"week": wk, "points": 0}
+		m()["race"] = r
+	return r
+
+
+## Simulated scores for week `week` at time t: steady pace per crew with some lumps.
+static func bot_scores(week: int, t: float) -> Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = week * 977 + 13
+	var hours := clampf((t - (week_end(week) - WEEK)) / 3600.0, 0.0, WEEK / 3600.0)
+	var out := []
+	for name in RACE_BOTS:
+		var pace := rng.randf_range(0.08, 0.55) # points per hour
+		var start := rng.randf_range(0.0, 30.0) # hours before they begin
+		var lump := rng.randf_range(0.8, 1.2)
+		out.append({"name": name, "points": int(maxf(0.0, hours - start) * pace * lump)})
+	return out
+
+
+## Sorted standings with the player included. [{name, points, you}]
+func race_board(t := -1.0) -> Array:
+	var r := race()
+	var now := Game.now() if t < 0.0 else t
+	var rows := bot_scores(int(r["week"]), now)
+	rows.append({"name": "Your crew", "points": int(r["points"]), "you": true})
+	rows.sort_custom(func(a, b): return a["points"] > b["points"] or (a["points"] == b["points"] and a.get("you", false)))
+	return rows
+
+
+func race_rank(t := -1.0) -> int:
+	var rows := race_board(t)
+	for i in rows.size():
+		if rows[i].get("you", false):
+			return i + 1
+	return rows.size()
+
+
+static func race_prize(rank: int) -> Dictionary:
+	if rank <= RACE_PRIZES.size():
+		return RACE_PRIZES[rank - 1]
+	return RACE_TOP10 if rank <= 10 else {}
+
+
+func _race_add(points: int) -> void:
+	if not race_open():
+		return
+	var r := race()
+	r["points"] = int(r["points"]) + points
+	changed.emit()
+
+
+## Pays last week's placing (called when a new week is first seen).
+func _race_settle(r: Dictionary) -> void:
+	if int(r.get("points", 0)) <= 0:
+		return
+	var wk := int(r["week"])
+	var rows := bot_scores(wk, week_end(wk))
+	rows.append({"name": "Your crew", "points": int(r["points"]), "you": true})
+	rows.sort_custom(func(a, b): return a["points"] > b["points"] or (a["points"] == b["points"] and a.get("you", false)))
+	var rank := rows.size()
+	for i in rows.size():
+		if rows[i].get("you", false):
+			rank = i + 1
+	var prize := race_prize(rank)
+	if not prize.is_empty():
+		grant(prize)
+	event_result.emit.call_deferred("race_settled", {"rank": rank, "prize": prize, "points": int(r["points"])})
+
+
+# ---------------------------------------------------------------- rescue missions
+
+## Every 15th level won opens a pull-the-pin rescue mission (no lives at stake).
+const RESCUE_EVERY := 15
+const RESCUE_REWARD := {"scrap": 250, "undo": 1, "pre_cool": 1}
+
+
+func rescue_pending() -> bool:
+	return bool(m().get("rescue_pending", false))
+
+
+func rescue_index() -> int:
+	return int(m().get("rescues", 0))
+
+
+func rescue_won() -> void:
+	m()["rescue_pending"] = false
+	m()["rescues"] = rescue_index() + 1
+	grant(RESCUE_REWARD)
+	Game.save_game()
+	changed.emit()

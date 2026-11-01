@@ -353,6 +353,36 @@ func _progress(g: Node) -> void:
 			break
 	check(got_card["set_done"] and g.booster_count("pre_tank") == bonus_before + 1, "completing a set pays its reward")
 
+	# Heat Run: 7 straight wins pay a share of the pool; one loss knocks you out.
+	g.level = 25
+	g.meta["run"] = {"state": "idle"}
+	check(meta.run_can_join() and meta.run_join() and meta.run()["state"] == "running", "join the Heat Run")
+	var s_run: int = g.scrap
+	for k in meta.RUN_STEPS:
+		g.win_level(60.0)
+	var run: Dictionary = meta.run()
+	var surv: Array = run["survivors"]
+	check(run["state"] == "won" and surv.size() == meta.RUN_STEPS + 1 and surv[-1] <= surv[0] and int(run["prize"]) == meta.run_prize(surv[-1]), "Heat Run won after %d wins" % meta.RUN_STEPS)
+	check(g.scrap >= s_run + int(run["prize"]) and not meta.run_can_join(), "prize paid, cooldown before the next run")
+	g.meta["run"]["next_at"] = 0.0
+	meta.run_join()
+	g.win_level(60.0)
+	g.lose_life()
+	check(meta.run()["state"] == "lost", "a loss ends the Heat Run")
+	check(meta.run_survivors(42) == meta.run_survivors(42), "simulated crews are deterministic")
+
+	# Weekly race: wins score, the week rolls over and pays the placing.
+	g.meta.erase("race")
+	var p0: int = meta.race()["points"]
+	g.level = 31
+	g.win_level(60.0)
+	check(meta.race()["points"] == p0 + 1 and meta.race_board().size() == 20, "a win scores a race point")
+	var wk: int = meta.week_of(g.now())
+	g.meta["race"] = {"week": wk - 1, "points": 999}
+	var s_race: int = g.scrap
+	meta.race()
+	check(g.meta["race"]["week"] == wk and g.meta["race"]["points"] == 0 and g.scrap >= s_race + int(meta.RACE_PRIZES[0]["scrap"]), "last week's 1st place is paid on rollover")
+
 	# Save round-trip.
 	g.tutorial["blk_frozen"] = true
 	var d: Dictionary = JSON.parse_string(JSON.stringify(g.to_dict()))

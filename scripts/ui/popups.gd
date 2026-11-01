@@ -24,6 +24,7 @@ static func _title(text: String, sub := "", col := UIKit.TEXT) -> Control:
 	if sub != "":
 		var s := UIKit.label(sub, "Header", HORIZONTAL_ALIGNMENT_CENTER)
 		s.add_theme_color_override("font_color", UIKit.GOLD)
+		s.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART # long subtitles must not widen the modal
 		v.add_child(s)
 	return v
 

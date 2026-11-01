@@ -119,6 +119,28 @@ func _tour() -> void:
 	main.puzzle._update()
 	await _shot("b_boss_charges", 0.4)
 	main.show_home()
+	# Events and the rescue mission.
+	Game.level = 30
+	Game.meta["rescue_pending"] = true
+	main._refresh()
+	await _shot("c_rail", 1.0)
+	await _close_all(main)
+	Meta.run_join()
+	Game.win_level(55.0)
+	Game.win_level(55.0)
+	MetaPopups.heat_run(main)
+	await _shot("c_heatrun", 0.5)
+	await _close_all(main)
+	MetaPopups.race(main)
+	await _shot("c_race", 0.5)
+	await _close_all(main)
+	main.play_rescue()
+	await _shot("c_rescue", 1.5)
+	var rg: Node = main.get_children().filter(func(n): return n is RescueGame)[0]
+	rg.pull(0)
+	await _shot("c_rescue_pulled", 2.5)
+	await _close_all(main)
+	main.show_home()
 	main.show_home()
 	Game.condenser_at = Game.now() - 6 * 3600.0
 	Popups.condenser(main)

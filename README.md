@@ -46,9 +46,19 @@ outline that fills with parts, and every carriage climbs one level at a time to 
   of one colour, tap another tank to pour onto the same colour or into an empty tank. A full one-colour
   tank seals.
 - **Blockers**, one new kind at a time (intro popup the first time each appears):
-  frozen tank (level 16, thaws after N tanks are sealed), ash canisters (31, hidden until exposed),
-  tagged tank (46, only takes one colour), hot canister (66, flares +8 °C unless sealed within its
-  countdown; sealing it in time cools 2 °C). Later levels mix up to two (three on heatwave levels).
+  frozen tank (16), ash (31), tagged tank (46), hot canister (66), padlock + key colour (81),
+  rescue-drone-parts goal (96), rust that creeps when idle (111), conveyor rows (126), twin tanks that
+  share pours (141), seal-in-order goal (161). Later levels mix up to two (three on heatwave levels).
+- **Landmark boss** per region: RESTORE on a landmark starts a boss level; winning restores it.
+- **Combo charges**: a 2-seal cold snap earns a Magnet (pulls every matching top into one tank),
+  a 3-seal snap a Frost Charge (thaws, unlocks, scrubs rust, delays hot canisters, -10 °C).
+- **Level start popup**: blockers in the level, win streak, pre-level boosters (Cool Start,
+  Extra Tank, Ash Sweep). 1/2/3+ wins in a row make them free. Wins end with a cool-bonus cash-out.
+- **Meta** (`scripts/autoloads/meta.gd`, state saved in `Game.meta`): 7-day login calendar,
+  Juno's story bubble, carriage liveries (3-way choice on build), Sandy the fox
+  (`scripts/world/pet.gd`), postcard album (5 sets of 6), Heat Run (7 wins in a row vs 99
+  simulated crews), weekly race (19 simulated crews), pull-the-pin rescue every 15 levels
+  (`scripts/rescue/rescue_game.gd`, own physics SubViewport).
 - **Heat**: each pour heats the carriage by (70 − 30) / move budget; sealing a tank cools 2 °C, and
   seals chained within 3 s make a **cold snap** (3 °C more per link). At 70 °C the level is lost: pay
   scrap or watch an ad to cool 15 °C, or give up (costs a life). Every 10th level is a heatwave level
@@ -107,7 +117,9 @@ Patterns (chosen / rejected):
 ```bash
 G=/Applications/Godot.app/Contents/MacOS/Godot
 $G --headless --path . -s tests/test_puzzle.gd       # rules, level data, progress systems; PASS/FAILED
-python3 tools/gen_levels.py                          # regenerate data/levels.json (all levels solved)
+$G --headless --path . --fixed-fps 60 -s tests/test_rescue.gd   # rescue layouts: right pins win, wrong lose
+python3 tools/gen_levels.py                          # regenerate data/levels.json (all levels solved, ~5 min)
+python3 tools/gen_levels.py --solutions              # refresh tests/solutions.json (replayed by test_puzzle)
 $G --path . --resolution 720x1280 -- --shots=/tmp/railhaven_shots             # home, puzzle and popup screens
 $G --path . --resolution 720x1280 -- --shots=/tmp/railhaven_shots --regions   # every region
 $G --path . -- --shots=/tmp/railhaven_shots              # screenshot every screen + simulated tap/drag checks

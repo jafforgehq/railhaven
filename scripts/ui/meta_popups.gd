@@ -218,3 +218,113 @@ static func album(main: Node) -> void:
 	v.add_child(close)
 	var panel := Popups._wrap(main, v)
 	close.pressed.connect(func(): main.close_modal_of(panel))
+
+
+# ---------------------------------------------------------------- Heat Run
+
+static func heat_run(main: Node) -> void:
+	var r := Meta.run()
+	var v := Popups._modal_box(620)
+	v.add_child(Popups._big_icon("streak", 90, UIKit.ORANGE))
+	v.add_child(Popups._title("HEAT RUN", "Win %d levels in a row. Lose once and you are out." % Meta.RUN_STEPS, UIKit.ORANGE))
+	var running: bool = r["state"] == "running"
+	var wins := int(r.get("wins", 0)) if running or r["state"] == "won" else 0
+	var steps := UIKit.hbox(6)
+	steps.alignment = BoxContainer.ALIGNMENT_CENTER
+	for k in Meta.RUN_STEPS:
+		var done := k < wins
+		var chip := UIKit.panel("CardGold" if k == wins and running else ("CardTeal" if done else "Card"),
+			Icon.make("check" if done else "temp", 30, UIKit.GREEN if done else UIKit.MUTED))
+		steps.add_child(chip)
+	v.add_child(steps)
+	var alive := Meta.RUN_CREWS
+	if r.has("survivors"):
+		alive = int(r["survivors"][mini(wins, Meta.RUN_STEPS)])
+	v.add_child(UIKit.label("Crews still in the run: %d of %d" % [alive, Meta.RUN_CREWS], "Value", HORIZONTAL_ALIGNMENT_CENTER))
+	var pool := UIKit.wrap_label("Finishers share %d scrap (about %d each right now)" % [Meta.RUN_POOL, Meta.run_prize(alive)], "Small")
+	pool.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(pool)
+	var btn: Button
+	if running:
+		btn = UIKit.button("PLAY LEVEL %d" % Game.level, "TealButton", "play", 70)
+	elif Meta.run_can_join():
+		btn = UIKit.button("JOIN THE RUN", "GoldButton", "streak", 70)
+	else:
+		var wait := maxf(0.0, float(r.get("next_at", 0)) - Game.now())
+		btn = UIKit.button("NEXT RUN IN %s" % UIKit.fmt_time(wait), "", "", 64)
+		btn.disabled = true
+	if r["state"] == "won":
+		v.add_child(UIKit.label("Last run: finished with %d crews, +%d scrap" % [int(r["survivors"][Meta.RUN_STEPS]), int(r.get("prize", 0))], "Accent", HORIZONTAL_ALIGNMENT_CENTER))
+	elif r["state"] == "lost":
+		v.add_child(UIKit.label("Last run: out after %d wins" % int(r.get("wins", 0)), "Small", HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(btn)
+	var close := UIKit.button("CLOSE", "", "", 54)
+	v.add_child(close)
+	var panel := Popups._wrap(main, v)
+	close.pressed.connect(func(): main.close_modal_of(panel))
+	btn.pressed.connect(func():
+		main.close_modal_of(panel)
+		if not running:
+			Meta.run_join()
+			Audio.play("whistle")
+		if Game.lives > 0:
+			pre_level(main)
+		else:
+			Popups.out_of_lives(main))
+
+
+# ---------------------------------------------------------------- weekly race
+
+static func race(main: Node) -> void:
+	var r := Meta.race()
+	var v := Popups._modal_box(620)
+	var left := Meta.week_end(int(r["week"])) - Game.now()
+	v.add_child(Popups._title("WEEKLY RACE", "Ends in %s · wins score 1, heatwave 2, boss 3" % UIKit.fmt_time(left), UIKit.GOLD))
+	var prizes := UIKit.wrap_label("1st %s · 2nd %s · 3rd %s · top 10 %s" % [Meta.reward_text(Meta.RACE_PRIZES[0]), Meta.reward_text(Meta.RACE_PRIZES[1]),
+		Meta.reward_text(Meta.RACE_PRIZES[2]), Meta.reward_text(Meta.RACE_TOP10)], "Small")
+	prizes.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(prizes)
+	var rows := Meta.race_board()
+	var list := UIKit.vbox(4)
+	for i in rows.size():
+		var row: Dictionary = rows[i]
+		var you: bool = row.get("you", false)
+		var rank := UIKit.label("#%d" % (i + 1), "Value")
+		rank.custom_minimum_size.x = 60
+		var name := UIKit.label(row["name"], "Value")
+		name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var pts := UIKit.label("%d" % row["points"], "Value")
+		var icon := Icon.make("trophy" if i < 3 else "flag", 26, [UIKit.GOLD, Color("c9d1da"), Color("d08a4a")][i] if i < 3 else UIKit.MUTED)
+		list.add_child(UIKit.panel("CardGold" if you else "Card", UIKit.hbox(8, [rank, icon, name, pts])))
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, 640)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(list)
+	v.add_child(scroll)
+	var close := UIKit.button("CLOSE", "TealButton", "", 58)
+	v.add_child(close)
+	var panel := Popups._wrap(main, v)
+	close.pressed.connect(func(): main.close_modal_of(panel))
+
+
+## Event results that need a moment of their own.
+static func event_result(main: Node, kind: String, info: Dictionary) -> void:
+	var v := Popups._modal_box(560)
+	match kind:
+		"run_won":
+			v.add_child(Popups._big_icon("trophy", 100, UIKit.GOLD))
+			v.add_child(Popups._title("HEAT RUN COMPLETE!", "%d crews made it" % int(info["survivors"][Meta.RUN_STEPS]), UIKit.GOLD))
+			v.add_child(Popups._reward_row([["scrap", "+%d" % int(info["prize"])]]))
+		"run_lost":
+			v.add_child(Popups._big_icon("streak", 90, UIKit.MUTED))
+			v.add_child(Popups._title("OUT OF THE HEAT RUN", "You won %d in a row. A new run opens in an hour." % int(info["wins"])))
+		"race_settled":
+			v.add_child(Popups._big_icon("trophy", 100, UIKit.GOLD))
+			v.add_child(Popups._title("LAST WEEK'S RACE", "You placed #%d with %d points" % [info["rank"], info["points"]], UIKit.GOLD))
+			if not info["prize"].is_empty():
+				v.add_child(UIKit.label(Meta.reward_text(info["prize"]), "Accent", HORIZONTAL_ALIGNMENT_CENTER))
+	var ok := UIKit.button("OK", "TealButton", "check", 60)
+	v.add_child(ok)
+	var panel := Popups._wrap(main, v)
+	ok.pressed.connect(func(): main.close_modal_of(panel))

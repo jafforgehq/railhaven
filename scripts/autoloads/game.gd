@@ -10,6 +10,8 @@ signal carriage_upgraded(uid: int)
 signal task_completed(index: int)
 signal region_complete
 signal region_started(index: int)
+signal level_won(reward: Dictionary) # events (Heat Run, race) listen to results
+signal level_lost
 
 const SAVE_PATH := "user://railhaven_save.json"
 const DRONE_CYCLE := 30.0
@@ -299,6 +301,7 @@ func win_boss(heat: float) -> Dictionary:
 	stats["wins"] += 1
 	stats["streak"] += 1
 	stats["best_streak"] = maxi(stats["best_streak"], stats["streak"])
+	level_won.emit(reward)
 	save_game()
 	changed.emit()
 	return reward
@@ -325,6 +328,7 @@ func win_level(heat: float) -> Dictionary:
 	stats["wins"] += 1
 	stats["streak"] += 1
 	stats["best_streak"] = maxi(stats["best_streak"], stats["streak"])
+	level_won.emit(reward)
 	save_game()
 	changed.emit()
 	return reward
@@ -337,6 +341,7 @@ func lose_life() -> void:
 	lives = maxi(0, lives - 1)
 	stats["losses"] += 1
 	stats["streak"] = 0
+	level_lost.emit()
 	save_game()
 	changed.emit()
 
