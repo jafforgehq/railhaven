@@ -52,6 +52,9 @@ func _ready() -> void:
 	Game.event_started.connect(_on_event_started)
 	Game.event_ended.connect(func(_id): _refresh_now())
 	Game.chapter_complete.connect(_on_chapter_complete)
+	Game.chapter_started.connect(_on_chapter_started)
+	Game.research_finished.connect(func(_id): Audio.play("goal_complete"); _refresh_panel(true))
+	Game.crew_leveled.connect(func(_s, _l): Audio.play("upgrade"))
 	Game.offline_report.connect(_on_offline_report)
 	Game.carriage_built.connect(func(_u): _rebuild_plates(); _refresh_panel(true))
 	Game.carriage_upgraded.connect(func(_u): _refresh_panel(true))
@@ -114,7 +117,7 @@ func _build_bottom() -> void:
 	nav = UIKit.hbox(10)
 	nm.add_child(nav)
 	var group := ButtonGroup.new()
-	for d in [["train", "TRAIN", "Build · Upgrade", "train"], ["crew", "CREW", "Survivors · Jobs", "crew"], ["journey", "JOURNEY", "Route · Tower", "map"]]:
+	for d in [["train", "TRAIN", "Build · Upgrade", "train"], ["crew", "CREW", "Survivors · Jobs", "crew"], ["journey", "JOURNEY", "Route · Landmark", "map"]]:
 		var b := Button.new()
 		b.theme_type_variation = "TabButton"
 		b.toggle_mode = true
@@ -208,6 +211,17 @@ func open_build() -> void:
 	Audio.play("ui_open")
 
 
+func open_research() -> void:
+	if tab != "train":
+		set_tab("train")
+	_show(ResearchPanel.new())
+	var lab := Game.first_of("lab")
+	if not lab.is_empty():
+		world.set_selected(lab["uid"])
+		world.focus(lab["uid"])
+	Audio.play("ui_open")
+
+
 func _on_tap_carriage(uid: int) -> void:
 	if current is CarriagePanel and current.uid == uid:
 		show_train_overview()
@@ -292,7 +306,7 @@ func _process(_delta: float) -> void:
 		var slots := Data.slots(c["type"], c["level"])
 		if slots > 0:
 			var n := Game.workers_in(uid).size()
-			if n == 0 and d.has("res") and c["type"] != "dronebay":
+			if n == 0 and not c["type"] in ["dronebay", "cooling"]:
 				ex.text = "needs workers"
 				ex.add_theme_color_override("font_color", UIKit.RED)
 			else:
@@ -411,7 +425,8 @@ func _carriage_pos(uid: int) -> Vector2:
 func _update_coach(delta: float) -> void:
 	_go_boost = maxf(0.0, _go_boost - delta)
 	var g := Game.current_goal()
-	if g.is_empty() or not _modal_stack.is_empty() or (Game.goal_index >= TUTORIAL_GOALS and _go_boost <= 0.0):
+	var tutorial := Game.chapter == 0 and Game.goal_index < TUTORIAL_GOALS
+	if g.is_empty() or not _modal_stack.is_empty() or (not tutorial and _go_boost <= 0.0):
 		coach.point(Vector2.ZERO, "")
 		return
 	var pos := Vector2(-1, -1)
@@ -486,12 +501,31 @@ func _update_coach(delta: float) -> void:
 			text = "Drones collect scrap by themselves. Just watch them work"
 		"distance":
 			pos = Vector2(get_viewport_rect().size.x * 0.5, hud.band_top() + 10)
-			text = "The train is driving to the Climate Tower. Keep building meanwhile"
+			text = "The train is driving to the %s. Keep building meanwhile" % Game.ch()["landmark_name"]
 			arrow = false
+		"research":
+			if current is ResearchPanel:
+				pos = _target_pos("research_start")
+				text = "Pick a project and tap START" if Game.research_id == "" else "Research is running. Keep building meanwhile"
+				arrow = Game.research_id == ""
+			elif not on_train:
+				pos = _target_pos("tab_train")
+				text = "Back to the train"
+			else:
+				pos = _carriage_pos(Game.first_of("lab").get("uid", -1))
+				text = "Tap the Research Lab"
+		"crew_level":
+			pos = Vector2(get_viewport_rect().size.x * 0.5, hud.band_top() + 10)
+			text = "Workers gain experience while they work. Keep everyone busy"
+			arrow = false
+		"any_level":
+			pos = _target_pos("tab_train") if not on_train else Vector2(get_viewport_rect().size.x * 0.5, hud.band_top() + 10)
+			text = "Upgrade your best carriage all the way"
+			arrow = not on_train
 		"tower":
 			if tab != "journey":
 				pos = _target_pos("tab_journey")
-				text = "Open Journey to restore the tower"
+				text = "Open Journey to restore the %s" % Game.ch()["landmark_name"]
 			else:
 				pos = _target_pos("launch")
 				text = "Send the drones to the tower"
@@ -523,12 +557,25 @@ func goto_goal() -> void:
 			open_carriage(Game.first_of("dronebay")["uid"])
 		"survivors":
 			open_carriage(Game.first_of("quarters")["uid"])
+		"research":
+			if Game.count_type("lab") == 0:
+				open_build()
+			else:
+				open_research()
+		"crew_level":
+			set_tab("crew")
+		"any_level":
+			var best: Dictionary = Game.carriages[0]
+			for c in Game.carriages:
+				if c["level"] > best["level"] and c["level"] < Game.level_cap():
+					best = c
+			open_carriage(best["uid"])
 		_:
 			set_tab("journey")
 
 
 func _on_goal_completed(index: int) -> void:
-	var g: Dictionary = Data.GOALS[index]
+	var g: Dictionary = Game.goals()[index]
 	var reward := Data.cost_text(g["reward"])
 	show_toast("Goal complete: %s%s" % [g["text"], (" (+" + reward + ")") if reward != "" else ""], "good")
 	Audio.play("goal_complete")
@@ -542,7 +589,14 @@ func _on_event_started(_id: String) -> void:
 
 func _on_chapter_complete() -> void:
 	Audio.play_music("tower_restored")
-	Popups.tower_restored(self)
+	Popups.chapter_complete(self)
+
+
+func _on_chapter_started(_index: int) -> void:
+	world.on_chapter_started()
+	_rebuild_plates()
+	set_tab("journey" if tab == "journey" else "train")
+	show_toast("Chapter %d: %s" % [Game.chapter + 1, Game.region_name()], "good")
 
 
 func _on_offline_report(report: Dictionary) -> void:

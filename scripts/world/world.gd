@@ -68,6 +68,7 @@ func _ready() -> void:
 	Game.carriage_upgraded.connect(_on_upgraded)
 	Game.drone_returned.connect(_on_drone_returned)
 	Game.chapter_complete.connect(func(): _set_cool())
+	_apply_region()
 	_set_cool()
 
 
@@ -208,7 +209,7 @@ func rebuild() -> void:
 		v.position.x = x
 		x += (LocoView.LW + 6.0) if c["type"] == "locomotive" else PITCH
 	ghost.position = Vector2(x, 0)
-	ghost.visible = Game.carriages.size() - 1 < Data.MAX_CARRIAGES
+	ghost.visible = Game.carriages.size() - 1 < Game.train_length()
 	_train.ends = views.values().map(func(v): return v.position.x)
 	_train.queue_redraw()
 	var length := train_end()
@@ -284,6 +285,19 @@ func _on_drone_returned(uid: int, amount: float) -> void:
 	Audio.play("drone_return")
 
 
+## New chapter: swap the region's scenery and landmark, make room for the longer train.
+func on_chapter_started() -> void:
+	_apply_region()
+	_set_cool()
+	rebuild()
+
+
+func _apply_region() -> void:
+	var c := Game.ch()
+	for s in _layers.values():
+		s.set_region(c["scenery"], c["landmark"], c["ground"])
+
+
 func _set_cool() -> void:
 	for s in _layers.values():
 		s.cool = 1.0 if Game.chapter_done else 0.0
@@ -303,7 +317,8 @@ func _process(delta: float) -> void:
 		s.heat = snappedf(_heat, 0.05)
 		s.storm = snappedf(_storm, 0.05)
 	var sky: Node2D = _layers["landmark"]
-	sky.tower = snappedf(clampf((Game.distance - Data.TOWER_DISTANCE * 0.6) / (Data.TOWER_DISTANCE * 0.4), 0.0, 1.0), 0.05)
+	var ld := Game.landmark_distance()
+	sky.tower = snappedf(clampf((Game.distance - ld * 0.6) / (ld * 0.4), 0.0, 1.0), 0.05)
 	sky.restored = Game.chapter_done
 	_storm_fx.emitting = _storm > 0.3
 	_storm_rect.color.a = _storm * 0.28
@@ -509,7 +524,7 @@ class DroneLayer extends CarriageView:
 			var base := v.position + Vector2(116, -150)
 			var tau: float = c["timer"]
 			var n := mini(Data.drones(c["level"]), 3)
-			var rem := Data.DRONE_RUN_TIME - tau
+			var rem := Game.drone_run_time() - tau
 			for i in n:
 				var start := base + Vector2((i - 1) * 16, 0)
 				var far := base + Vector2(170 + i * 36, -170 - i * 18)
@@ -528,11 +543,11 @@ class DroneLayer extends CarriageView:
 						PackedColorArray([Color(0.6, 1, 0.95, 0.3), Color(0.6, 1, 0.95, 0.3), Color(0.6, 1, 0.95, 0), Color(0.6, 1, 0.95, 0)]))
 					draw_drone(p.round(), 0.5, t + i)
 		# Tower expedition: a heavy-lift drone heading out with parts.
-		if Game.expedition >= 0.0 and Game.tower_stage < Data.TOWER_STAGES.size():
+		if Game.expedition >= 0.0 and Game.tower_stage < Game.stages().size():
 			var bay := Game.first_of("dronebay")
 			var v2: CarriageView = world.views.get(bay.get("uid", -1))
 			if v2:
-				var total: float = Data.TOWER_STAGES[Game.tower_stage]["time"]
+				var total: float = Game.stages()[Game.tower_stage]["time"]
 				var k := clampf((total - Game.expedition) / 6.0, 0.0, 1.0)
 				if k < 1.0:
 					var p := v2.position + Vector2(116, -152) + Vector2(k * k * 260, -k * 200)

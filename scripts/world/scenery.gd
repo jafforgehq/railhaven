@@ -30,6 +30,10 @@ var cool := 0.0:
 		_retint()
 var tower := 0.0 # landmark visibility 0..1
 var restored := false
+var region := "desert"
+var landmark := "tower"
+var ground := [0.0, Color.WHITE] # [desaturation, tint] for strips without their own region render
+static var _ground_shader: Shader
 var _t := 0.0
 var _tex: Texture2D
 var _towers: Array = []
@@ -37,10 +41,55 @@ var _towers: Array = []
 
 func _ready() -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_load()
+
+
+## Region art: sky/far/mid have their own renders per region; the shared near/track/front
+## strips (and any region render that is missing) are tinted instead.
+func set_region(r: String, lm: String, g: Array) -> void:
+	region = r
+	landmark = lm
+	ground = g
+	if is_inside_tree():
+		_load()
+	_retint()
+	queue_redraw()
+
+
+func _load() -> void:
+	var regrade := region != "desert"
 	if RECTS.has(kind):
-		_tex = load(DIR % kind)
+		var path := DIR % kind
+		if region != "desert" and kind in ["sky", "far", "mid"]:
+			var own := DIR % ("%s_%s" % [kind, region])
+			if ResourceLoader.exists(own):
+				path = own
+				regrade = false
+		_tex = load(path)
+		_set_grade(regrade)
 	elif kind == "landmark":
-		_towers = [load(DIR % "tower"), load(DIR % "tower_restored")]
+		var a := DIR % landmark
+		var b := DIR % (landmark + "_restored")
+		if not ResourceLoader.exists(a) or not ResourceLoader.exists(b):
+			a = DIR % "tower"
+			b = DIR % "tower_restored"
+		_towers = [load(a), load(b)]
+
+
+## Desaturate-then-tint, so the orange desert ground can read as grey ash or pale glass.
+func _set_grade(on: bool) -> void:
+	if not on:
+		material = null
+		return
+	if _ground_shader == null:
+		_ground_shader = Shader.new()
+		_ground_shader.code = "shader_type canvas_item;\nuniform float desat = 0.0;\nuniform vec3 tint = vec3(1.0);\nvoid fragment() {\n\tfloat l = dot(COLOR.rgb, vec3(0.299, 0.587, 0.114));\n\tCOLOR.rgb = mix(COLOR.rgb, vec3(l), desat) * tint;\n}\n"
+	var m := ShaderMaterial.new()
+	m.shader = _ground_shader
+	m.set_shader_parameter("desat", float(ground[0]))
+	var c: Color = ground[1]
+	m.set_shader_parameter("tint", Vector3(c.r, c.g, c.b))
+	material = m
 
 
 func _retint() -> void:
@@ -68,6 +117,8 @@ func _draw() -> void:
 func _draw_tower(base: Vector2) -> void:
 	var tex: Texture2D = _towers[1 if restored else 0]
 	draw_texture_rect(tex, Rect2(base + Vector2(-70, -200), Vector2(140, 202)), false, Color(1, 1, 1, tower))
+	if landmark != "tower":
+		return # the other landmarks have their lights baked into the render
 	var glow := CarriageView.glow_texture()
 	if restored:
 		var pulse := 0.5 + 0.5 * sin(_t * 2.0)

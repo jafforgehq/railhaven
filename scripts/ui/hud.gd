@@ -69,7 +69,7 @@ func _build_top() -> void:
 	_top.add_child(m)
 	var row := UIKit.hbox(6)
 	m.add_child(row)
-	for k in Data.RES:
+	for k in Data.CORE:
 		var val := UIKit.label("0", "Value")
 		val.add_theme_font_size_override("font_size", 26)
 		var note := UIKit.label("", "Small")
@@ -143,7 +143,7 @@ func _build_cards() -> void:
 
 func refresh() -> void:
 	var r := Game.rates()
-	for k in Data.RES:
+	for k in Data.CORE:
 		var chip: Array = _chips[k]
 		var v: float = Game.res[k]
 		var cap := Game.storage(k)
@@ -159,10 +159,14 @@ func refresh() -> void:
 
 	var g := Game.current_goal()
 	if g.is_empty():
-		_goal_text.text = "Climate Tower restored! Keep growing your train." if Game.chapter_done else "Chapter complete"
+		if Game.journey_complete():
+			_goal_text.text = "Haven is founded! Keep growing your train."
+			go_button.visible = false
+		else:
+			_goal_text.text = "%s restored! Open Journey to depart." % Game.ch()["landmark_name"]
+			go_button.visible = true
 		_goal_prog.text = ""
 		_goal_bar.value = 1.0
-		go_button.visible = false
 	else:
 		_goal_text.text = g["text"]
 		if Game.goal_build_type() == "cooling" and g.get("arg", "") != "cooling":
@@ -190,7 +194,7 @@ func refresh() -> void:
 		if ev["choice"] == "":
 			msg = "%s: tap to choose (%ds)" % [d["title"], int(ceil(ev["decide_left"]))]
 		else:
-			msg = "%s · %s · %s" % [d["title"], d[ev["choice"]]["effect"], UIKit.fmt_time(ev["time_left"])]
+			msg = "%s · %s · %s" % [d["title"], Game.event_effect(ev["id"], ev["choice"]), UIKit.fmt_time(ev["time_left"])]
 	if Game.rationing:
 		var ration := "Out of food or water: crew is rationing"
 		msg = ration if msg == "" else msg + "\n" + ration

@@ -17,7 +17,7 @@ func build() -> void:
 	add_child(scroll)
 	var cards := UIKit.hbox(10)
 	scroll.add_child(cards)
-	for t in Data.BUILDABLE:
+	for t in Data.BUILDABLE.filter(func(x): return Game.unlocked(x)):
 		var d: Dictionary = Data.CARRIAGES[t]
 		var name := UIKit.label(d["name"].to_upper(), "Header")
 		name.add_theme_font_size_override("font_size", 25)
@@ -46,12 +46,12 @@ func build() -> void:
 
 
 func refresh() -> void:
-	var room := maxi(0, Game.cooling_capacity() - Game.cooling_used())
+	var room := maxi(0, mini(Game.cooling_capacity() - Game.cooling_used(), Game.train_length() - (Game.carriages.size() - 1)))
 	_sub.text = "Room for %d more carriage%s. Cooling Modules make room for more." % [room, "" if room == 1 else "s"]
 	for t in _cards:
 		var parts: Array = _cards[t]
 		UIKit.clear(parts[0])
-		parts[0].add_child(UIKit.cost_row(Data.build_cost(t, Game.count_type(t)), 24))
+		parts[0].add_child(UIKit.cost_row(Game.build_cost(t), 24))
 		var why := Game.build_block_reason(t)
 		parts[1].text = why
 		parts[2].disabled = why != ""

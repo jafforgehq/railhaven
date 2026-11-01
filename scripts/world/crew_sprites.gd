@@ -26,7 +26,12 @@ static func preset_for(role: String, look: Dictionary) -> String:
 
 static func tex(name: String) -> Texture2D:
 	if not _tex.has(name):
-		_tex[name] = load(DIR + name + ".png")
+		var path := DIR + name + ".png"
+		if not ResourceLoader.exists(path):
+			# A role without its own render yet borrows the engineer's sheet.
+			var role := name.get_slice("_", 0)
+			path = DIR + name.replace(role + "_", "engineer_").replace("engineer_" + name.get_slice("_", 1), "engineer_a") + ".png"
+		_tex[name] = load(path)
 	return _tex[name]
 
 

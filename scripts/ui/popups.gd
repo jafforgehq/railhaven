@@ -36,7 +36,7 @@ static func offline(main: Node, r: Dictionary) -> void:
 	var grid := GridContainer.new()
 	grid.columns = 4
 	grid.add_theme_constant_override("h_separation", 10)
-	for k in Data.RES:
+	for k in Data.CORE:
 		var g: float = r["gains"][k]
 		var val := UIKit.label(("+" if g >= 0 else "") + UIKit.fmt(g) if absf(g) >= 1.0 else "±0", "Value", HORIZONTAL_ALIGNMENT_CENTER)
 		val.add_theme_color_override("font_color", UIKit.GREEN if g >= 1.0 else (UIKit.RED if g <= -1.0 else UIKit.MUTED))
@@ -51,7 +51,11 @@ static func offline(main: Node, r: Dictionary) -> void:
 		extra.append("+%d survivors joined" % r["survivors"])
 	extra.append("%d km travelled" % int(r["distance"]))
 	if r["stages"] > 0:
-		extra.append("%d tower stage%s finished" % [r["stages"], "" if r["stages"] == 1 else "s"])
+		extra.append("%d landmark stage%s finished" % [r["stages"], "" if r["stages"] == 1 else "s"])
+	if r.get("research", 0) > 0:
+		extra.append("%d research finished" % r["research"])
+	if r["gains"].get("data", 0.0) >= 1.0:
+		extra.append("+%s data" % UIKit.fmt(r["gains"]["data"]))
 	v.add_child(UIKit.label(" · ".join(extra), "Sub", HORIZONTAL_ALIGNMENT_CENTER))
 	var safe: bool = r["safe_mode"]
 	var status := UIKit.label("Safe mode engaged — rationing kept the crew alive. Growth slowed." if safe else "Crew safe · Systems stable", "")
@@ -80,7 +84,7 @@ static func event(main: Node) -> void:
 	var id: String = Game.event["id"]
 	var d: Dictionary = Data.EVENTS[id]
 	var v := _modal_box(660)
-	var head := UIKit.panel("Warn", UIKit.hbox(12, [Icon.make("warning", 40, UIKit.ORANGE), UIKit.vbox(-4, [UIKit.label(d["title"], "Header"), UIKit.label(d["sub"], "Sub")])]))
+	var head := UIKit.panel("Warn", UIKit.hbox(12, [Icon.make(d.get("icon", "warning"), 40, UIKit.ORANGE), UIKit.vbox(-4, [UIKit.label(d["title"], "Header"), UIKit.label(d["sub"], "Sub")])]))
 	v.add_child(head)
 	v.add_child(UIKit.wrap_label(d["text"], ""))
 	var row := UIKit.hbox(12)
@@ -90,10 +94,11 @@ static func event(main: Node) -> void:
 	var buttons := []
 	for choice in ["a", "b"]:
 		var o: Dictionary = d[choice]
-		var effect := UIKit.label(o["effect"], "Accent" if choice == "a" else "Value")
+		var o_cost := Game.event_cost(id, choice)
+		var effect := UIKit.label(Game.event_effect(id, choice), "Accent" if choice == "a" else "Value")
 		if choice == "b":
 			effect.add_theme_color_override("font_color", UIKit.GOLD)
-		var cost: Control = UIKit.cost_row(o["cost"], 24) if not o["cost"].is_empty() else UIKit.label("No cost", "Small")
+		var cost: Control = UIKit.cost_row(o_cost, 24) if not o_cost.is_empty() else UIKit.label("No cost", "Small")
 		var btn := UIKit.button(o["label"], "TealButton" if choice == "a" else "GoldButton", "", 60)
 		var ch: String = choice
 		btn.pressed.connect(func():
@@ -101,7 +106,7 @@ static func event(main: Node) -> void:
 				main.close_modal() # topmost; lambdas capture locals by value so `panel` is still null here
 			else:
 				Audio.play("error"))
-		buttons.append([btn, o["cost"], id == "signal" and choice == "a"])
+		buttons.append([btn, o_cost, id == "signal" and choice == "a"])
 		var col := UIKit.vbox(8, [Icon.make(o["icon"], 48, UIKit.TEAL if choice == "a" else UIKit.GOLD), UIKit.label(o["title"], "Header"),
 			UIKit.wrap_label(o["desc"], "Small"), HSeparator.new(), cost, effect, UIKit.spacer(false), btn])
 		var card := UIKit.panel("CardTeal" if choice == "a" else "CardGold", col)
@@ -112,7 +117,8 @@ static func event(main: Node) -> void:
 		if Game.event.is_empty() or Game.event["choice"] != "" or Game.event.get("id", "") != id:
 			main.close_modal_of(panel)
 			return
-		timer.text = ("The flare fades in %ds" if id == "signal" else "Automatic safe mode in %ds") % int(ceil(Game.event["decide_left"]))
+		var fmt: String = {"signal": "The flare fades in %ds", "trader": "The traders leave in %ds", "raiders": "Raiders strike in %ds"}.get(id, "Automatic safe mode in %ds")
+		timer.text = fmt % int(ceil(Game.event["decide_left"]))
 		for b in buttons:
 			b[0].disabled = not Game.can_afford(b[1]) or (b[2] and not Game.can_rescue())
 	refresh.call()
@@ -126,27 +132,44 @@ static func event(main: Node) -> void:
 
 # ---------------------------------------------------------------- chapter complete
 
-static func tower_restored(main: Node) -> void:
+static func chapter_complete(main: Node) -> void:
 	Game.chapter_seen = true
+	var c := Game.ch()
 	var v := _modal_box(640)
-	var ic := Icon.make("tower", 96, UIKit.TEAL)
+	var ic := Icon.make(c["landmark"], 96, UIKit.TEAL)
 	ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	v.add_child(ic)
-	v.add_child(_title("CLIMATE TOWER RESTORED", "", UIKit.TEAL))
-	v.add_child(UIKit.wrap_label("The tower hums once more. A small zone of stable climate brings water, life and new possibilities to the Ash Coast.", ""))
-	var lbl := UIKit.label("REWARDS UNLOCKED", "Small", HORIZONTAL_ALIGNMENT_CENTER)
-	lbl.add_theme_color_override("font_color", UIKit.GOLD)
-	v.add_child(lbl)
-	for r in [["water", "Water recovery unlocked", "+25% water from every recycler."],
-			["map", "New region: Ash Coast", "Outside temperature drops to 55°C."],
-			["cooling", "Cooler air", "+1 cooling capacity for the whole train."]]:
-		var txt := UIKit.vbox(0, [UIKit.label(r[1], "Value"), UIKit.wrap_label(r[2], "Small")])
-		txt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		v.add_child(UIKit.panel("Card", UIKit.hbox(12, [Icon.make(r[0], 40, UIKit.TEAL), txt])))
-	var btn := UIKit.button("CONTINUE JOURNEY", "TealButton", "map", 70)
+	var last := Game.is_last_chapter()
+	v.add_child(_title(("%s IS FOUNDED" if last else "%s RESTORED") % c["landmark_name"].to_upper(), "Chapter %d complete" % (Game.chapter + 1), UIKit.TEAL))
+	v.add_child(UIKit.wrap_label(c["done_text"], ""))
+	var btn: Button
+	if last:
+		var t := UIKit.wrap_label("You finished the journey. The train keeps running: keep upgrading, research everything and grow your crew.", "Small")
+		v.add_child(UIKit.panel("CardGold", t))
+		btn = UIKit.button("KEEP PLAYING", "TealButton", "star", 70)
+	else:
+		var nxt: Dictionary = Data.CHAPTERS[Game.chapter + 1]
+		var lbl := UIKit.label("NEXT: %s" % nxt["region"].to_upper(), "Small", HORIZONTAL_ALIGNMENT_CENTER)
+		lbl.add_theme_color_override("font_color", UIKit.GOLD)
+		v.add_child(lbl)
+		var rows := [["map", nxt["region"], "%s · %d°C outside" % [nxt["landmark_name"], nxt["temp"]]],
+			["up", "Carriages up to Lv.%d" % nxt["level_cap"], "Train length %d carriages" % nxt["train"]]]
+		if nxt["perk_text"] != "":
+			rows.append(["star", "Region bonus", nxt["perk_text"]])
+		for t in Data.BUILDABLE:
+			if int(Data.CARRIAGES[t]["chapter"]) == Game.chapter + 1:
+				rows.append([Data.CARRIAGES[t]["icon"], "New carriage: %s" % Data.CARRIAGES[t]["name"], Data.CARRIAGES[t]["desc"]])
+		for r in rows:
+			var txt := UIKit.vbox(0, [UIKit.label(r[1], "Value"), UIKit.wrap_label(r[2], "Small")])
+			txt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			v.add_child(UIKit.panel("Card", UIKit.hbox(12, [Icon.make(r[0], 40, UIKit.TEAL), txt])))
+		btn = UIKit.button("DEPART", "TealButton", "train", 70)
 	v.add_child(btn)
 	var panel := _wrap(main, v, false)
-	btn.pressed.connect(func(): main.close_modal_of(panel))
+	btn.pressed.connect(func():
+		main.close_modal_of(panel)
+		if Game.advance_chapter():
+			Audio.play("whistle"))
 	Audio.play("whistle")
 	if Game.autosave:
 		Game.save_game()
@@ -254,9 +277,10 @@ static func assign(main: Node, sid: int) -> void:
 
 static func goals(main: Node) -> void:
 	var v := _modal_box(600)
-	v.add_child(_title("CHAPTER 1", "Toward the Climate Tower"))
-	for i in Data.GOALS.size():
-		var g: Dictionary = Data.GOALS[i]
+	v.add_child(_title("CHAPTER %d" % (Game.chapter + 1), "%s · %s" % [Game.region_name(), Game.ch()["landmark_name"]]))
+	var gl := Game.goals()
+	for i in gl.size():
+		var g: Dictionary = gl[i]
 		var done := i < Game.goal_index
 		var cur := i == Game.goal_index
 		var p := Game.goal_progress(g)
@@ -283,7 +307,7 @@ static func how_to_play(main: Node) -> void:
 		["parts", "Workers in the Workshop turn scrap into parts."],
 		["hammer", "Spend scrap and parts to build and upgrade carriages."],
 		["crew", "Food, water and beds let survivors join. Tap a carriage, then + to give them work."],
-		["tower", "Goal: reach the Climate Tower and restore it with drone expeditions."],
+		["map", "Goal: reach each region's landmark and restore it with drone expeditions, then travel on."],
 		["star", "Not sure what to do? Follow NEXT STEP at the top and tap GO."],
 	]:
 		var l := UIKit.wrap_label(step[1], "")

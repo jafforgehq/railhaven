@@ -9,6 +9,7 @@ var _status: Label
 var _status_icon: Icon
 var _beds: Label
 var _slots: Label
+var _research_btn: Button
 
 
 func build() -> void:
@@ -18,7 +19,7 @@ func build() -> void:
 	_status = UIKit.wrap_label("", "")
 	_status.add_theme_font_size_override("font_size", 23)
 	add_child(UIKit.panel("Card", UIKit.hbox(10, [_status_icon, _status])))
-	for k in Data.RES:
+	for k in Data.CORE:
 		var nm := UIKit.label(Data.RES_NAMES[k], "")
 		nm.custom_minimum_size.x = 76
 		var b := UIKit.bar(0.0, COLORS[k], 10)
@@ -35,13 +36,17 @@ func build() -> void:
 	add_child(UIKit.hbox(18, [UIKit.hbox(6, [Icon.make("bed", 24), _beds]), UIKit.hbox(6, [Icon.make("cooling", 24), _slots])]))
 	var build_btn := UIKit.button("ADD A CARRIAGE", "TealButton", "hammer", 62)
 	build_btn.pressed.connect(func(): main.open_build())
-	add_child(build_btn)
+	build_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_research_btn = UIKit.button("RESEARCH", "", "flask", 62)
+	_research_btn.pressed.connect(func(): main.open_research())
+	_research_btn.custom_minimum_size.x = 200
+	add_child(UIKit.hbox(10, [build_btn, _research_btn]))
 	main.register_target("add_carriage", build_btn)
 
 
 func refresh() -> void:
 	var r := Game.rates()
-	for k in Data.RES:
+	for k in Data.CORE:
 		var row: Array = _rows[k]
 		var cap := Game.storage(k)
 		row[0].value = clampf(Game.res[k] / cap, 0.0, 1.0)
@@ -49,7 +54,11 @@ func refresh() -> void:
 		row[2].text = UIKit.fmt_rate(r[k])
 		row[2].add_theme_color_override("font_color", UIKit.GREEN if r[k] > 0.05 else (UIKit.RED if r[k] < -0.05 else UIKit.MUTED))
 	_beds.text = "Beds %d/%d" % [Game.survivors.size(), Game.capacity()]
-	_slots.text = "Train has room for %d more carriage%s" % [maxi(0, Game.cooling_capacity() - Game.cooling_used()), "" if Game.cooling_capacity() - Game.cooling_used() == 1 else "s"]
+	var room := mini(Game.cooling_capacity() - Game.cooling_used(), Game.train_length() - (Game.carriages.size() - 1))
+	_slots.text = "Train has room for %d more carriage%s" % [maxi(0, room), "" if room == 1 else "s"]
+	_research_btn.visible = Game.count_type("lab") > 0
+	if _research_btn.visible:
+		_research_btn.get_meta("label").text = "RESEARCH" if Game.research_id == "" else UIKit.fmt_time(Game.research_left / Game.research_speed())
 	var s := status_line()
 	_status.text = s[1]
 	_status_icon.kind = s[0]
@@ -74,6 +83,10 @@ static func status_line() -> Array:
 		open += maxi(0, Game.free_slots(c["uid"]))
 	if idle > 0 and open > 0:
 		return ["crew", "%d survivor%s resting. Open a carriage and tap + to give them work." % [idle, "" if idle == 1 else "s"], UIKit.GOLD]
+	if Game.count_type("lab") > 0 and Game.research_id == "":
+		for d in Game.research_list():
+			if Game.research_block_reason(d["id"]) == "":
+				return ["flask", "Research is idle. Tap RESEARCH and start %s." % d["name"], UIKit.GOLD]
 	if Game.res["scrap"] >= Game.storage("scrap") - 0.5:
 		return ["scrap", "Scrap storage is full. Spend it on building, or upgrade the Drone Bay.", UIKit.GOLD]
 	return ["check", "Everything is running. Your crew keeps working even when the game is closed.", UIKit.GREEN]

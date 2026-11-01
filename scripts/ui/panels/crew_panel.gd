@@ -3,11 +3,12 @@ extends BasePanel
 ## Crew screen: every survivor with portrait, specialty and job assignment.
 
 const JOB_LABEL := {"workshop": "Workshop", "greenhouse": "Greenhouse", "recycler": "Water Recycler",
-	"dronebay": "Drone Bay", "cooling": "Cooling Module"}
+	"dronebay": "Drone Bay", "cooling": "Cooling Module", "lab": "Research Lab", "medbay": "Med Bay"}
 var _title: Label
 var _sub: Label
 var _grid: GridContainer
 var _sig := ""
+var _xp := {} # sid -> [level label, xp bar]
 
 
 func build() -> void:
@@ -36,16 +37,27 @@ func build() -> void:
 func refresh() -> void:
 	var assigned := Game.survivors.size() - Game.idle_survivors().size()
 	_title.text = "CREW · %d SURVIVORS" % Game.survivors.size()
-	var upkeep := Game.survivors.size() * Data.FOOD_PER_SURVIVOR * 60.0
+	var upkeep := Game.survivors.size() * Data.FOOD_PER_SURVIVOR * 60.0 * Game.upkeep_mult()
 	_sub.text = "Assigned %d · Resting %d · Beds %d/%d · Upkeep %.1f food & water/min" % [
 		assigned, Game.survivors.size() - assigned, Game.survivors.size(), Game.capacity(), upkeep]
 	var sig := str(Game.survivors.map(func(s): return [s["id"], s["job"]]))
-	if sig == _sig:
-		return
-	_sig = sig
-	UIKit.clear(_grid)
+	if sig != _sig:
+		_sig = sig
+		UIKit.clear(_grid)
+		_xp.clear()
+		# Most experienced first, so the veterans are easy to find.
+		var list := Game.survivors.duplicate()
+		list.sort_custom(func(a, b): return a.get("xp", 0.0) > b.get("xp", 0.0))
+		for s in list:
+			_grid.add_child(_card(s))
 	for s in Game.survivors:
-		_grid.add_child(_card(s))
+		if not _xp.has(s["id"]):
+			continue
+		var lv := Game.crew_level(s)
+		_xp[s["id"]][0].text = "Lv.%d" % lv
+		var lo := Data.xp_for(lv)
+		var hi := Data.xp_for(lv + 1)
+		_xp[s["id"]][1].value = 1.0 if lv >= Data.MAX_CREW_LEVEL else (s.get("xp", 0.0) - lo) / (hi - lo)
 
 
 func _card(s: Dictionary) -> Control:
@@ -76,7 +88,11 @@ func _card(s: Dictionary) -> Control:
 	if not c.is_empty() and c["type"] == match_job:
 		perk.add_theme_color_override("font_color", UIKit.GREEN)
 		perk.text = "★ " + perk.text
-	var card := UIKit.panel("Card", UIKit.vbox(4, [p, name, role, btn, perk]))
+	var lvl := UIKit.label("", "Accent")
+	var bar := UIKit.bar(0.0, UIKit.GOLD, 6)
+	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_xp[s["id"]] = [lvl, bar]
+	var card := UIKit.panel("Card", UIKit.vbox(4, [p, name, role, UIKit.hbox(6, [lvl, bar]), btn, perk]))
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card.custom_minimum_size.x = 200
 	return card

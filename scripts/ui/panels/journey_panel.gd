@@ -1,7 +1,7 @@
 class_name JourneyPanel
 extends BasePanel
-## Journey screen: route between regions and the chapter goal — restoring the
-## Climate Tower remotely with drone expeditions that consume parts.
+## Journey screen: the route through all regions and the current chapter goal — restoring
+## the region's landmark remotely with drone expeditions, then departing for the next one.
 
 var _route: RouteView
 var _dist: Label
@@ -27,16 +27,25 @@ func build() -> void:
 	var body := UIKit.vbox(8)
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(body)
-	var title := UIKit.label("CLIMATE TOWER", "Header")
+	var c := Game.ch()
+	var title := UIKit.label(c["landmark_name"].to_upper(), "Header")
 	_dist = UIKit.label("", "Sub")
-	var desc := UIKit.wrap_label(Data.REGIONS[1]["desc"] + " Drones can restore it remotely once the train is in range.", "Small")
-	body.add_child(UIKit.hbox(12, [UIKit.panel("CardTeal", Icon.make("tower", 54, UIKit.TEAL)), UIKit.vbox(0, [title, _dist, desc])]))
-	body.get_child(0).get_child(1).size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var desc := UIKit.wrap_label(c["desc"] + " Drones can restore it remotely once the train is in range.", "Small")
+	var col := UIKit.vbox(0, [title, _dist, desc])
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body.add_child(UIKit.hbox(12, [UIKit.panel("CardTeal", Icon.make(c["landmark"], 54, UIKit.TEAL)), col]))
 	_stages = UIKit.vbox(8)
 	body.add_child(_stages)
-	var reward := UIKit.wrap_label("Reward: water recovery (+25% water), new region Ash Coast (55°C, +1 cooling capacity).", "Small")
-	reward.add_theme_color_override("font_color", UIKit.GOLD)
-	body.add_child(reward)
+	if not Game.is_last_chapter():
+		var nxt: Dictionary = Data.CHAPTERS[Game.chapter + 1]
+		var reward := UIKit.wrap_label("Reward: the way to the %s opens (carriages up to Lv.%d, train length %d%s)." % [
+			nxt["region"], nxt["level_cap"], nxt["train"], (", " + nxt["perk_text"]) if nxt["perk_text"] != "" else ""], "Small")
+		reward.add_theme_color_override("font_color", UIKit.GOLD)
+		body.add_child(reward)
+	if c["perk_text"] != "":
+		var perk := UIKit.label("Region bonus here: %s" % c["perk_text"], "Small")
+		perk.add_theme_color_override("font_color", UIKit.TEAL)
+		body.add_child(perk)
 	_goals_btn = UIKit.button("CHAPTER GOALS", "", "star", 54)
 	_goals_btn.pressed.connect(func(): Popups.goals(main))
 	body.add_child(_goals_btn)
@@ -46,16 +55,20 @@ func build() -> void:
 func refresh() -> void:
 	_route.queue_redraw()
 	var d := Game.distance
+	var total := Game.landmark_distance()
+	var n_st := Game.stages().size()
 	if Game.chapter_done:
-		_dist.text = "Restored · the Ash Coast lies ahead"
-	elif d >= Data.TOWER_DISTANCE:
-		_dist.text = "In drone range · stage %d of %d" % [mini(Game.tower_stage + 1, 3), Data.TOWER_STAGES.size()]
+		_dist.text = "Restored" if Game.is_last_chapter() else "Restored · the %s lies ahead" % Data.CHAPTERS[Game.chapter + 1]["region"]
+	elif d >= total:
+		_dist.text = "In drone range · stage %d of %d" % [mini(Game.tower_stage + 1, n_st), n_st]
+	elif Game.train_speed() <= 0.0:
+		_dist.text = "%d / %d km · train stopped" % [int(d), int(total)]
 	else:
-		var left := (Data.TOWER_DISTANCE - d) / Game.train_speed()
-		_dist.text = "%d / %d km · in range in %s" % [int(d), int(Data.TOWER_DISTANCE), UIKit.fmt_time(left)]
+		var left := (total - d) / Game.train_speed()
+		_dist.text = "%d / %d km · in range in %s" % [int(d), int(total), UIKit.fmt_time(left)]
 	var why := Game.stage_block_reason()
 	# Affordability changes every few seconds; it is refreshed in place, not by rebuilding.
-	var sig := "%d|%s|%s|%d" % [Game.tower_stage, Game.expedition >= 0.0, "" if why == "Not enough resources" else why, Game.survivors.size()]
+	var sig := "%d|%d|%s|%s|%s|%d" % [Game.chapter, Game.tower_stage, Game.expedition >= 0.0, Game.chapter_done, "" if why == "Not enough resources" else why, Game.survivors.size()]
 	if sig != _sig:
 		_sig = sig
 		_build_stages()
@@ -63,11 +76,12 @@ func refresh() -> void:
 		_launch.disabled = why != ""
 		_launch_reason.text = Game.stage_shortfall() if why == "Not enough resources" else why
 		UIKit.clear(_launch_cost)
-		_launch_cost.add_child(UIKit.cost_row(Data.TOWER_STAGES[mini(Game.tower_stage, 2)]["cost"], 24))
-	_goals_btn.get_meta("label").text = "CHAPTER GOALS  %d/%d" % [mini(Game.goal_index, Data.GOALS.size()), Data.GOALS.size()]
-	if _exp_bar and Game.expedition >= 0.0 and Game.tower_stage < Data.TOWER_STAGES.size():
-		var total: float = Data.TOWER_STAGES[Game.tower_stage]["time"]
-		_exp_bar.value = 1.0 - Game.expedition / total
+		_launch_cost.add_child(UIKit.cost_row(Game.stages()[mini(Game.tower_stage, n_st - 1)]["cost"], 24))
+	var gl := Game.goals()
+	_goals_btn.get_meta("label").text = "CHAPTER GOALS  %d/%d" % [mini(Game.goal_index, gl.size()), gl.size()]
+	if _exp_bar and Game.expedition >= 0.0 and Game.tower_stage < n_st:
+		var t: float = Game.stages()[Game.tower_stage]["time"]
+		_exp_bar.value = 1.0 - Game.expedition / t
 		_exp_time.text = UIKit.fmt_time(Game.expedition)
 
 
@@ -75,10 +89,11 @@ func _build_stages() -> void:
 	UIKit.clear(_stages)
 	_exp_bar = null
 	_launch = null
-	for i in Data.TOWER_STAGES.size():
-		var st: Dictionary = Data.TOWER_STAGES[i]
+	var sts := Game.stages()
+	for i in sts.size():
+		var st: Dictionary = sts[i]
 		var done := i < Game.tower_stage
-		var cur := i == Game.tower_stage
+		var cur := i == Game.tower_stage and not Game.chapter_done
 		var icon := Icon.make("check" if done else ("drone" if cur else "lock"), 28, UIKit.GREEN if done else (UIKit.GOLD if cur else UIKit.MUTED))
 		var name := UIKit.label("%d. %s" % [i + 1, st["name"]], "Value" if cur else "")
 		if not cur:
@@ -98,8 +113,8 @@ func _build_stages() -> void:
 				var l := UIKit.label(text, "Small")
 				l.add_theme_color_override("font_color", UIKit.GREEN if ok else UIKit.ORANGE)
 				col.add_child(UIKit.hbox(6, [Icon.make("check" if ok else "close", 18, UIKit.GREEN if ok else UIKit.ORANGE), l]))
-			var range_ok := Game.distance >= Data.TOWER_DISTANCE
-			var rl := UIKit.label("Tower within drone range", "Small")
+			var range_ok := Game.distance >= Game.landmark_distance()
+			var rl := UIKit.label("%s within drone range" % Game.ch()["landmark_name"], "Small")
 			rl.add_theme_color_override("font_color", UIKit.GREEN if range_ok else UIKit.ORANGE)
 			col.add_child(UIKit.hbox(6, [Icon.make("check" if range_ok else "close", 18, UIKit.GREEN if range_ok else UIKit.ORANGE), rl]))
 			if Game.expedition >= 0.0:
@@ -114,45 +129,58 @@ func _build_stages() -> void:
 						Audio.play("error"))
 				_launch_reason = UIKit.label("", "Small")
 				_launch_reason.add_theme_color_override("font_color", UIKit.ORANGE)
+				_launch_reason.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 				_launch_cost = UIKit.hbox(0)
 				col.add_child(UIKit.hbox(10, [_launch_cost, UIKit.spacer(), _launch]))
 				col.add_child(_launch_reason)
 		_stages.add_child(UIKit.panel("CardTeal" if cur else "Card", col))
 	if Game.chapter_done:
-		var l := UIKit.label("ASH COAST UNLOCKED — more of the journey arrives in Chapter 2.", "Accent")
-		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		_stages.add_child(UIKit.panel("CardGold", l))
+		if Game.is_last_chapter():
+			var l := UIKit.label("HAVEN IS FOUNDED — the journey is complete. Keep growing your train!", "Accent")
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			_stages.add_child(UIKit.panel("CardGold", l))
+		else:
+			var nxt: Dictionary = Data.CHAPTERS[Game.chapter + 1]
+			var l := UIKit.wrap_label("The %s is open. Depart when you are ready: the train keeps everything it has." % nxt["region"], "")
+			var go := UIKit.button("DEPART FOR %s" % nxt["region"].to_upper(), "TealButton", "train", 64)
+			main.register_target("depart", go)
+			go.pressed.connect(func():
+				if Game.advance_chapter():
+					Audio.play("whistle"))
+			_stages.add_child(UIKit.panel("CardGold", UIKit.vbox(8, [l, go])))
 
 
 class RouteView extends Control:
+	const SHORT := ["DESERT", "ASH COAST", "GLASS FLATS", "DROWNED CITY", "HIGHLANDS"]
+
 	func _draw() -> void:
 		var w := size.x
 		var y := size.y * 0.62
-		var xs := [w * 0.14, w * 0.5, w * 0.86]
-		var names := ["DRY BASIN", "CLIMATE TOWER", "ASH COAST"]
-		var icons := ["sun", "tower", "water"]
-		var reached := [true, Game.distance >= Data.TOWER_DISTANCE, Game.chapter_done]
+		var n := Data.CHAPTERS.size()
+		var xs: Array = []
+		for i in n:
+			xs.append(lerpf(w * 0.1, w * 0.9, float(i) / (n - 1)))
 		var font := UIKit.font_bold
-		# Track.
-		draw_line(Vector2(xs[0], y), Vector2(xs[2], y), Color("3a3f45"), 4.0)
-		var k := clampf(Game.distance / Data.TOWER_DISTANCE, 0.0, 1.0)
-		var tx: float = lerpf(xs[0], xs[1], k)
-		if Game.chapter_done:
-			tx = lerpf(xs[1], xs[2], 0.25)
+		var cur := Game.chapter
+		draw_line(Vector2(xs[0], y), Vector2(xs[n - 1], y), Color("3a3f45"), 4.0)
+		# Progress inside the current chapter runs from this stop toward the next.
+		var k := clampf(Game.distance / Game.landmark_distance(), 0.0, 1.0)
+		var tx: float = xs[cur]
+		if cur < n - 1:
+			tx = lerpf(xs[cur], xs[cur + 1], 0.5 * k + (0.5 if Game.chapter_done else 0.0))
 		draw_line(Vector2(xs[0], y), Vector2(tx, y), UIKit.GOLD, 4.0)
-		for i in 3:
+		for i in n:
 			var c := Vector2(xs[i], y)
-			var col: Color = UIKit.GREEN if reached[i] else (UIKit.GOLD if i == 1 else UIKit.MUTED)
-			draw_circle(c, 26, Color("15181d"))
-			draw_arc(c, 26, 0, TAU, 32, col, 3.0)
-			Icon.draw_kind(self, icons[i] if (i < 2 or Game.chapter_done) else "lock", Rect2(c - Vector2(16, 16), Vector2(32, 32)), col)
-			var sz := font.get_string_size(names[i], HORIZONTAL_ALIGNMENT_LEFT, -1, 22)
-			draw_string(font, Vector2(c.x - sz.x * 0.5, y - 40), names[i], HORIZONTAL_ALIGNMENT_LEFT, -1, 22, UIKit.TEXT if reached[i] or i == 1 else UIKit.MUTED)
-			var st := "COMPLETE" if reached[i] and (i == 0 or i == 1 and Game.chapter_done) else ("%d%%" % int(k * 100) if i == 1 else ("UNLOCKED" if reached[i] else "LOCKED"))
-			if i == 1 and k >= 1.0 and not Game.chapter_done:
-				st = "RESTORING %d/3" % Game.tower_stage
-			var s2 := font.get_string_size(st, HORIZONTAL_ALIGNMENT_LEFT, -1, 18)
-			draw_string(font, Vector2(c.x - s2.x * 0.5, y + 48), st, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, col)
+			var done := i < cur or (i == cur and Game.chapter_done)
+			var here := i == cur
+			var col: Color = UIKit.GREEN if done else (UIKit.GOLD if here else UIKit.MUTED)
+			draw_circle(c, 24, Color("15181d"))
+			draw_arc(c, 24, 0, TAU, 32, col, 3.0)
+			Icon.draw_kind(self, Data.CHAPTERS[i]["landmark"] if i <= cur else "lock", Rect2(c - Vector2(15, 15), Vector2(30, 30)), col)
+			var name: String = SHORT[i]
+			var sz := font.get_string_size(name, HORIZONTAL_ALIGNMENT_LEFT, -1, 18)
+			var ny := y - 38 if i % 2 == 0 else y + 46
+			draw_string(font, Vector2(c.x - sz.x * 0.5, ny), name, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, UIKit.TEXT if i <= cur else UIKit.MUTED)
 		# Train marker.
 		var m := Vector2(tx, y - 2)
 		draw_rect(Rect2(m - Vector2(12, 8), Vector2(24, 12)), UIKit.GOLD)

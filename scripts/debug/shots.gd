@@ -31,6 +31,8 @@ func _ready() -> void:
 		_chars.call_deferred()
 	elif OS.get_cmdline_user_args().has("--detour"):
 		_detour.call_deferred()
+	elif OS.get_cmdline_user_args().has("--regions"):
+		_regions.call_deferred()
 	else:
 		_tour.call_deferred()
 
@@ -40,6 +42,46 @@ func _shot(name: String) -> void:
 	await RenderingServer.frame_post_draw
 	get_viewport().get_texture().get_image().save_png(dir.path_join(name + ".png"))
 	print("shot ", name)
+
+
+## Every region with its landmark (dormant, then restored) plus the late-game sheets.
+func _regions() -> void:
+	var main: Node = get_parent()
+	await get_tree().create_timer(0.3).timeout
+	while not main._modal_stack.is_empty():
+		main.close_modal()
+	Game.new_game()
+	Game.res["scrap"] = 1e6
+	Game.res["parts"] = 1e6
+	Game.res["data"] = 500.0
+	for ci in Data.CHAPTERS.size():
+		Game.chapter = ci
+		Game.chapter_done = false
+		Game.tower_stage = 0
+		for t in ["greenhouse", "cooling", "recycler", "cargo", "lab", "medbay"]:
+			if Game.unlocked(t) and Game.count_type(t) == 0:
+				Game.build(t)
+		for c in Game.carriages:
+			c["level"] = Game.level_cap()
+		while Game.survivors.size() < 8 + ci * 4:
+			Game.survivors.append(Game._make_survivor())
+		Game.auto_assign()
+		Game.distance = Game.landmark_distance()
+		main.world.on_chapter_started()
+		main._rebuild_plates()
+		main.set_tab("journey")
+		await get_tree().create_timer(1.0).timeout
+		await _shot("r%d_%s_journey" % [ci + 1, Data.CHAPTERS[ci]["scenery"]])
+		Game.chapter_done = true
+		main.world._set_cool()
+		main.set_tab("train")
+		await get_tree().create_timer(1.0).timeout
+		await _shot("r%d_%s_restored" % [ci + 1, Data.CHAPTERS[ci]["scenery"]])
+	main.open_research()
+	await _shot("r9_research")
+	main.set_tab("crew")
+	await _shot("r9_crew")
+	get_tree().quit()
 
 
 func _tour() -> void:
@@ -82,7 +124,7 @@ func _tour() -> void:
 	main.close_modal()
 	main.set_tab("journey")
 	await _shot("09_journey")
-	Game.distance = Data.TOWER_DISTANCE + 1
+	Game.distance = Game.landmark_distance()
 	await _shot("10_journey_range")
 	main.set_tab("train")
 	Game.start_event("heatwave")
@@ -212,7 +254,7 @@ func _chars() -> void:
 	for k in 5:
 		var p := Portrait.new()
 		p.look = {"skin": k % 4, "hair": k, "hat": k % 3}
-		p.role = ["Engineer", "Grower", "Mechanic", "Pilot", "Technician"][k]
+		p.role = Data.ROLES[k % Data.ROLES.size()]
 		p.custom_minimum_size = Vector2(130, 130)
 		row.add_child(p)
 	await _shot("chars")

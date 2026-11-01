@@ -11,6 +11,9 @@ const PLAIN := {
 	"workshop": "Workers turn scrap into parts here. Parts are needed to build and upgrade.",
 	"cooling": "Keeps the train cool. Each module lets the train carry more carriages.",
 	"dronebay": "Drones fly out on their own and bring back scrap. Pilots make each trip bring more.",
+	"cargo": "Extra storage for every resource. Build one when costs no longer fit in your hold.",
+	"lab": "Scientists gather data here. Spend data on research for permanent bonuses.",
+	"medbay": "Medics keep the crew healthy: the whole train works harder and newcomers settle in faster.",
 }
 
 var uid := 0
@@ -47,6 +50,12 @@ func build() -> void:
 		box.add_child(_bar)
 	add_child(UIKit.panel("Card", box))
 
+	if _type == "lab":
+		var rb := UIKit.button("OPEN RESEARCH", "TealButton", "flask", 58)
+		rb.pressed.connect(func(): main.open_research())
+		main.register_target("open_research", rb)
+		add_child(rb)
+
 	# Workers as slots.
 	if Data.slots(_type, 1) > 0:
 		var t := UIKit.label("WORKERS", "Small")
@@ -76,7 +85,7 @@ func _status(c: Dictionary) -> Array:
 	var lv: int = c["level"]
 	var n := Game.workers_in(uid).size()
 	match _type:
-		"greenhouse", "recycler", "workshop":
+		"greenhouse", "recycler", "workshop", "lab":
 			var res: String = Data.CARRIAGES[_type]["res"]
 			var per_min := Game.carriage_output(c)
 			if n == 0:
@@ -90,17 +99,24 @@ func _status(c: Dictionary) -> Array:
 		"dronebay":
 			if Game.drones_grounded():
 				return ["Drones grounded", "Waiting for the sandstorm to pass"]
-			var left := Data.DRONE_RUN_TIME - float(c["timer"])
+			var left := Game.drone_run_time() - float(c["timer"])
 			return ["+%d scrap in %s" % [int(Game.drone_yield(c) * Game.efficiency()), UIKit.fmt_time(left)], "%d drone%s · trips repeat automatically" % [Data.drones(lv), "" if Data.drones(lv) == 1 else "s"]]
 		"locomotive":
 			return ["Storage x%.1f" % Data.loco_mult(lv), "Speed %d km/h" % int(Game.train_speed() * 360.0)]
+		"cargo":
+			var b := Data.storage_bonus("cargo", lv)
+			return ["+%s scrap storage" % UIKit.fmt(b["scrap"] * (1.0 + Game.bonus("storage"))), "+%s parts, food and water · +%s data" % [UIKit.fmt(b["parts"]), UIKit.fmt(b["data"])]]
+		"medbay":
+			if n == 0:
+				return ["No medic on duty", "Add a worker below to boost the whole train"]
+			return ["Whole train +%d%%" % int(round(Game.care() * 100.0)), "Newcomers arrive %d%% faster" % int(round(Game.care() * 200.0))]
 	return ["", ""]
 
 
 func _benefit_text(lv: int) -> String:
 	var parts: PackedStringArray = []
 	match _type:
-		"greenhouse", "recycler", "workshop":
+		"greenhouse", "recycler", "workshop", "lab":
 			parts.append("+40% output per worker")
 			if Data.slots(_type, lv + 1) > Data.slots(_type, lv):
 				parts.append("+1 worker slot")
@@ -117,6 +133,12 @@ func _benefit_text(lv: int) -> String:
 		"locomotive":
 			parts.append("+50% storage for everything")
 			parts.append("faster journey")
+		"cargo":
+			parts.append("+60% storage in this hold")
+		"medbay":
+			parts.append("stronger care per medic")
+			if Data.slots(_type, lv + 1) > Data.slots(_type, lv):
+				parts.append("+1 medic slot")
 	return "Upgrade to Lv.%d: %s" % [lv + 1, ", ".join(parts)]
 
 
@@ -128,18 +150,18 @@ func refresh() -> void:
 	_main_text.text = s[0]
 	_sub_text.text = s[1]
 	if _bar:
-		_bar.value = float(c["timer"]) / Data.DRONE_RUN_TIME if c["active"] else 0.0
+		_bar.value = float(c["timer"]) / Game.drone_run_time() if c["active"] else 0.0
 	if _slots_row:
 		_refresh_slots(c)
 	var lv: int = c["level"]
 	UIKit.clear(_cost_box)
-	if lv >= Data.MAX_LEVEL:
-		_benefit.text = "Fully upgraded"
+	if lv >= Game.level_cap():
+		_benefit.text = "Fully upgraded" if lv >= Data.MAX_LEVEL else "Max level for this region. The next region allows Lv.%d." % (lv + 1)
 		_upgrade.disabled = true
 		_reason.text = ""
 	else:
 		_benefit.text = _benefit_text(lv)
-		_cost_box.add_child(UIKit.cost_row(Data.upgrade_cost(_type, lv), 26))
+		_cost_box.add_child(UIKit.cost_row(Game.upgrade_cost(c), 26))
 		var why := Game.upgrade_block_reason(uid)
 		_upgrade.disabled = why != ""
 		_reason.text = "Not enough resources yet" if why == "Not enough resources" else why
@@ -148,7 +170,7 @@ func refresh() -> void:
 func _refresh_slots(c: Dictionary) -> void:
 	var workers := Game.workers_in(uid)
 	var slots := Data.slots(_type, c["level"])
-	var sig := "%s|%d|%d" % [str(workers.map(func(s): return s["id"])), slots, Game.idle_survivors().size()]
+	var sig := "%s|%d|%d" % [str(workers.map(func(s): return [s["id"], Game.crew_level(s)])), slots, Game.idle_survivors().size()]
 	if sig == _slots_sig:
 		return
 	_slots_sig = sig
@@ -159,7 +181,7 @@ func _refresh_slots(c: Dictionary) -> void:
 		p.look = s["look"]
 		p.role = s["role"]
 		p.custom_minimum_size = Vector2(52, 52)
-		var name := UIKit.label(s["name"] + (" ★" if s["role"] == want else ""), "Small")
+		var name := UIKit.label("%s%s\nLv.%d" % [s["name"], " ★" if s["role"] == want else "", Game.crew_level(s)], "Small")
 		name.add_theme_color_override("font_color", UIKit.TEXT)
 		var b := Button.new()
 		b.theme_type_variation = "Button"
@@ -177,29 +199,23 @@ func _refresh_slots(c: Dictionary) -> void:
 			Game.assign(sid, 0))
 		_slots_row.add_child(b)
 	var first_empty := true
+	var idle := Game.idle_survivors()
+	var others := Game.survivors.size() - workers.size()
 	for i in slots - workers.size():
-		var idle := Game.idle_survivors()
 		var add := UIKit.button("+", "GreenButton" if not idle.is_empty() else "", "", 64)
 		add.custom_minimum_size = Vector2(64, 64)
 		add.add_theme_font_size_override("font_size", 34)
-		add.disabled = idle.is_empty()
-		add.tooltip_text = "Add a resting survivor" if not idle.is_empty() else "Nobody is resting"
+		add.disabled = others <= 0
+		add.tooltip_text = "Add a resting survivor" if not idle.is_empty() else "Move a worker here from another carriage"
 		add.pressed.connect(func():
-			var pool := Game.idle_survivors()
-			if pool.is_empty():
-				return
-			var best: Dictionary = pool[0]
-			for s in pool:
-				if s["role"] == want:
-					best = s
-					break
-			Game.assign(best["id"], uid))
+			Audio.play("ui_click")
+			Game.pull_worker(uid))
 		_slots_row.add_child(add)
 		if first_empty:
 			main.register_target("assign_slot", add)
 			first_empty = false
-	if workers.size() < slots and Game.idle_survivors().is_empty():
-		var note := UIKit.label("Everyone is busy. More survivors join when there are free beds.", "Small")
+	if workers.size() < slots and idle.is_empty():
+		var note := UIKit.label("Everyone is busy. Tap + to move a worker here, or add beds so more survivors join.", "Small")
 		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		note.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_slots_row.add_child(note)

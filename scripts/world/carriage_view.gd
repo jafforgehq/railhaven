@@ -8,7 +8,7 @@ const W := 232.0
 const FLOOR := -32.0
 const IN_TOP := -120.0
 const SHIRT := {"Engineer": Color("c98a3a"), "Grower": Color("6f9a3a"), "Mechanic": Color("4f86b0"),
-	"Pilot": Color("d0702a"), "Technician": Color("3fa29a")}
+	"Pilot": Color("d0702a"), "Technician": Color("3fa29a"), "Scientist": Color("e8eef2"), "Medic": Color("5fb8a8")}
 
 var uid := 0
 var type := "workshop"
@@ -39,8 +39,9 @@ func _process(delta: float) -> void:
 		if type == "dronebay":
 			var phase: float = c["timer"]
 			var active: bool = c["active"] and not Game.drones_grounded()
-			var away := active and phase > 2.0 and phase < Data.DRONE_RUN_TIME - 2.5
-			hatch = move_toward(hatch, 1.0 if (active and (phase < 4.0 or phase > Data.DRONE_RUN_TIME - 5.0)) else 0.0, delta * 1.5)
+			var run := Game.drone_run_time()
+			var away := active and phase > 2.0 and phase < run - 2.5
+			hatch = move_toward(hatch, 1.0 if (active and (phase < 4.0 or phase > run - 5.0)) else 0.0, delta * 1.5)
 			docked = 0 if away else Data.drones(level)
 	elif type == "dronebay":
 		docked = Data.drones(level)
@@ -93,6 +94,9 @@ func _stations() -> Array:
 		"recycler": return [44.0, 104.0, 160.0, 200.0]
 		"cooling": return [150.0, 196.0]
 		"dronebay": return [52.0, 116.0, 176.0]
+		"lab": return [44.0, 100.0, 152.0, 196.0, 72.0]
+		"medbay": return [56.0, 112.0, 168.0, 200.0]
+		"cargo": return [60.0, 150.0]
 		"quarters": return [60.0, 120.0, 150.0, 190.0]
 		"locomotive": return [150.0]
 	return [100.0]
@@ -161,7 +165,17 @@ static var _glow_tex: Texture2D
 
 static func art(name: String) -> Texture2D:
 	if not _art.has(name):
-		_art[name] = load(TRAIN_DIR + name + ".png")
+		var path := TRAIN_DIR + name + ".png"
+		# Missing higher-level render: fall back to the closest lower level of the same carriage.
+		var m := RegEx.create_from_string("^(carriage_[a-z]+)_(\\d+)$").search(name)
+		if m and not ResourceLoader.exists(path):
+			var lv := int(m.get_string(2)) - 1
+			while lv > 1 and not ResourceLoader.exists(TRAIN_DIR + "%s_%d.png" % [m.get_string(1), lv]):
+				lv -= 1
+			path = TRAIN_DIR + "%s_%d.png" % [m.get_string(1), lv]
+			if not ResourceLoader.exists(path):
+				path = TRAIN_DIR + "carriage_workshop_1.png"
+		_art[name] = load(path)
 	return _art[name]
 
 
@@ -234,6 +248,8 @@ func _lamp_color() -> Color:
 	match type:
 		"quarters", "workshop": return Color(1.0, 0.8, 0.5)
 		"greenhouse": return Color(1.0, 0.82, 0.95)
+		"medbay": return Color(0.9, 1.0, 1.0)
+		"lab": return Color(0.55, 0.85, 1.0)
 	return Color(0.6, 1.0, 0.95)
 
 
@@ -352,7 +368,9 @@ func _work_pose(w: Dictionary) -> String:
 	match type:
 		"workshop": return "hammer"
 		"greenhouse": return "tend"
-		"recycler", "cooling": return "panel"
+		"recycler", "cooling", "lab": return "panel"
+		"medbay": return "tend"
+		"cargo": return "carry"
 		"dronebay": return "wrench"
 		"quarters":
 			return ["sleep", "sit", "idle"][int(w["i"]) % 3]

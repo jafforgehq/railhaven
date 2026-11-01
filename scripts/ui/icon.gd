@@ -28,7 +28,8 @@ static func make(k: String, size := 28.0, col := Color(0, 0, 0, 0)) -> Icon:
 
 
 const ART := ["arrow", "bulb", "scrap", "parts", "food", "water", "crew", "home", "cooling", "drone", "train", "tower",
-	"wrench", "hammer", "bed", "shield", "sun", "temp", "map", "star", "warning"]
+	"wrench", "hammer", "bed", "shield", "sun", "temp", "map", "star", "warning",
+	"data", "flask", "medkit", "crate", "raider", "trade", "rail", "ash", "desal", "mirror", "archive", "haven", "trophy"]
 static var _art := {}
 
 

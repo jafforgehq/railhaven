@@ -194,11 +194,226 @@ def icon_bulb():
         cylinder("thread", 0.19, 0.04, M("5a5f66"), (0, 0, z), outline=False)
 
 
-ICONS = {"arrow": icon_arrow, "bulb": icon_bulb, 
+def pivoted(loc, rot, build):
+    """Run build() around the origin, then move and turn everything it made as one piece."""
+    before = set(bpy.data.objects)
+    build()
+    p = bpy.data.objects.new("pivot", None)
+    bpy.context.scene.collection.objects.link(p)
+    for o in set(bpy.data.objects) - before:
+        if o.parent is None and o is not p:
+            o.parent = p
+    p.location, p.rotation_euler = loc, rot
+    return p
+
+
+def lump(name, r, mat, loc, scale, seed=0, sub=1):
+    """Faceted low-poly rock / hill with a flat underside."""
+    from mathutils import noise
+    bm = bmesh.new()
+    bmesh.ops.create_icosphere(bm, subdivisions=sub, radius=r)
+    for v in bm.verts:
+        v.co *= 1.0 + noise.noise(v.co * 3.0 + Vector((seed, seed * 0.7, 0))) * 0.12
+        if v.co.z < 0:
+            v.co.z *= 0.15
+    return C.finish(name, bm, mat, loc, (0, 0, 0), scale, smooth=False)
+
+
+def icon_data():
+    box("chip", -0.42, -0.42, 0.42, 0.42, -0.08, 0.08, M("2c3440"), bevel=0.06)
+    gold = M("d8b060", light=1.3)
+    for k in range(4):
+        t = -0.27 + k * 0.18
+        for x0, z0, x1, z1 in ((t - 0.045, 0.42, t + 0.045, 0.6), (t - 0.045, -0.6, t + 0.045, -0.42),
+                               (0.42, t - 0.045, 0.6, t + 0.045), (-0.6, t - 0.045, -0.42, t + 0.045)):
+            box("pin", x0, z0, x1, z1, -0.04, 0.04, gold)
+    box("core", -0.25, -0.25, 0.25, 0.25, -0.11, -0.08, M("3fd8c2", glow=1.5), outline=False)
+    trace = M("1a6e66", ao=0.0)
+    for x0, z0, x1, z1 in ((-0.18, 0.08, 0.04, 0.12), (0.0, -0.18, 0.04, 0.12), (0.04, -0.06, 0.18, -0.02), (-0.18, -0.14, -0.04, -0.1)):
+        box("trace", x0, z0, x1, z1, -0.12, -0.11, trace, outline=False)
+    sphere("node", 0.035, M("e8fffa", glow=1.8), (-0.18, -0.12, 0.1), outline=False)
+    sphere("node", 0.035, M("e8fffa", glow=1.8), (0.18, -0.12, -0.04), outline=False)
+
+
+def icon_flask():
+    glass = M("d4ecf4", light=1.2)
+    cylinder("liquid", 0.47, 0.32, M("5fd07a", light=1.3), (0, 0, -0.42), r2=0.34)
+    cylinder("glass", 0.34, 0.36, glass, (0, 0, -0.08), r2=0.14)
+    cylinder("neck", 0.14, 0.34, glass, (0, 0, 0.27))
+    torus("lip", 0.15, 0.045, M("eef8fb"), (0, 0, 0.44), outline=True)
+    for x, z, r in ((-0.14, -0.42, 0.05), (0.1, -0.36, 0.035), (0.02, -0.5, 0.03)):
+        sphere("bubble", r, M("e8fff0", glow=1.2), (x, -0.42, z), outline=False)
+    box("shine", -0.2, -0.2, -0.16, 0.0, -0.3, -0.27, M("ffffff", glow=1.0), outline=False).rotation_euler = (0, -0.5, 0)
+
+
+def icon_medkit():
+    box("case", -0.58, -0.42, 0.58, 0.32, -0.26, 0.26, M("eeeae2"), bevel=0.08)
+    torus("handle", 0.17, 0.05, M("8a8f96"), (0, 0, 0.33), rot=(math.pi / 2, 0, 0), outline=True)
+    box("seam", -0.58, 0.14, 0.58, 0.165, -0.27, -0.26, M("bdb6aa", ao=0.0), outline=False)
+    red = M("e0402a")
+    box("cross_v", -0.08, -0.33, 0.08, 0.07, -0.29, -0.26, red)
+    box("cross_h", -0.22, -0.21, 0.22, -0.05, -0.29, -0.26, red)
+
+
+def icon_crate():
+    wood = M("b07a44")
+    board = M("c8905a", light=1.2)
+    box("crate", -0.46, -0.52, 0.46, 0.36, -0.32, 0.32, wood, bevel=0.03)
+    for z in (-0.24, 0.06):
+        box("gap", -0.38, z, 0.38, z + 0.025, -0.33, -0.32, M("6a4424", ao=0.0), outline=False)
+    for x0, z0, x1, z1 in ((-0.46, 0.25, 0.46, 0.36), (-0.46, -0.52, 0.46, -0.41), (-0.46, -0.52, -0.35, 0.36), (0.35, -0.52, 0.46, 0.36)):
+        box("board", x0, z0, x1, z1, -0.36, -0.32, board)
+    brace = box("brace", -0.5, -0.055, 0.5, 0.055, -0.35, -0.32, board)
+    brace.location = (0, -0.34, -0.08)
+    brace.rotation_euler = (0, -math.atan2(0.77, 0.7), 0)
+    for x, z in ((-0.4, 0.3), (0.4, 0.3), (-0.4, -0.46), (0.4, -0.46)):
+        sphere("nail", 0.025, M("4a3a30"), (x, -0.37, z), outline=False, seg=8)
+
+
+def icon_raider():
+    metal = M("7c828a", light=1.3)
+    rust = M("a8602e", ao=0.0)
+    for k, a in enumerate((-0.75, -0.38, 0.0, 0.38, 0.75)):
+        h = 0.3 if k == 2 else 0.24
+        cylinder("spike", 0.065, h, M("c9a560", light=1.25), (math.sin(a) * (0.4 + h / 2), 0.05, 0.05 + math.cos(a) * (0.4 + h / 2)), rot=(0, a, 0), r2=0.0, seg=12)
+    sphere("dome", 0.46, metal, (0, 0, 0.02), scale=(1, 0.95, 0.92))
+    sphere("rust", 0.1, rust, (-0.22, -0.34, 0.22), scale=(1, 0.3, 0.7), outline=False)
+    sphere("dent", 0.07, M("5a6068", ao=0.0), (0.2, -0.38, 0.2), scale=(1, 0.3, 0.8), outline=False)
+    box("plate", -0.38, -0.5, 0.38, 0.02, -0.5, -0.28, M("5e646c"), bevel=0.06)
+    box("visor", -0.3, -0.17, 0.3, -0.05, -0.52, -0.5, M("ff5a30", glow=1.5), outline=False)
+    for x in (-0.15, -0.05, 0.05, 0.15):
+        box("grille", x - 0.018, -0.44, x + 0.018, -0.25, -0.52, -0.5, M("2a2c31", ao=0.0), outline=False)
+    for x in (-0.31, 0.31):
+        for z in (-0.4, -0.06):
+            sphere("rivet", 0.03, M("c8ccd2"), (x, -0.52, z), outline=False, seg=8)
+
+
+def arc_arrow(name, r, w, a0, a1, mat):
+    d = 1 if a1 > a0 else -1
+    n = 14
+    outer = [((r + w) * math.cos(a0 + (a1 - a0) * i / n), (r + w) * math.sin(a0 + (a1 - a0) * i / n)) for i in range(n + 1)]
+    inner = [((r - w) * math.cos(a0 + (a1 - a0) * i / n), (r - w) * math.sin(a0 + (a1 - a0) * i / n)) for i in range(n, -1, -1)]
+    head = [((r + w * 2.6) * math.cos(a1), (r + w * 2.6) * math.sin(a1)), (r * math.cos(a1 + d * 0.5), r * math.sin(a1 + d * 0.5)),
+            ((r - w * 2.6) * math.cos(a1), (r - w * 2.6) * math.sin(a1))]
+    prism(name, outer + head + inner, -0.08, 0.08, mat)
+
+
+def icon_trade():
+    arc_arrow("arrow_top", 0.42, 0.075, math.radians(165), math.radians(30), M("f0b84a", light=1.3))
+    arc_arrow("arrow_bot", 0.42, 0.075, math.radians(-15), math.radians(-150), M("3fb8a8", light=1.3))
+
+
+def icon_rail():
+    steel, shine, tie = M("7d838c", light=1.3), M("dfe4ea", ao=0.0), M("7a5030")
+
+    def piece(x0, x1, offs, right):
+        """Head, web and foot each snap at a slightly different x, so the break looks torn."""
+        for (z0, z1, hw), o in zip(((0.06, 0.17, 0.08), (-0.1, 0.06, 0.03), (-0.16, -0.1, 0.15)), offs):
+            if right:
+                pts = [(x0, z0), (x1 + o, z0), (x1 + o - 0.04, z1), (x0, z1)]
+            else:
+                pts = [(x0 + o + 0.04, z0), (x1, z0), (x1, z1), (x0 + o, z1)]
+            prism("rail", pts, -hw, hw, steel)
+        box("head_shine", x0 + 0.06, 0.165, x1 - 0.06, 0.18, -0.06, 0.06, shine, outline=False)
+
+    def build():
+        box("tie", -0.62, -0.3, -0.36, -0.16, -0.36, 0.36, tie, bevel=0.02)
+        box("tie", 0.3, -0.3, 0.56, -0.16, -0.36, 0.36, tie, bevel=0.02)
+        piece(-0.78, -0.04, (0.0, -0.05, 0.04), True)
+        pivoted((0.1, 0, 0.0), (0, -0.22, 0), lambda: piece(0.0, 0.62, (0.0, 0.05, -0.03), False))
+
+    pivoted((0.04, 0, 0.08), (0.42, 0, -0.95), build)
+
+
+def icon_ash():
+    ash = M("8e8a94", light=1.2)
+    for x, z, r in ((-0.3, 0.02, 0.25), (0.02, 0.14, 0.32), (0.32, 0.03, 0.24), (-0.12, -0.12, 0.24), (0.17, -0.12, 0.24)):
+        sphere("puff", r, ash, (x, -0.05 if r < 0.3 else 0.05, z), scale=(1, 0.8, 0.85))
+    for x, z, r in ((-0.25, -0.42, 0.04), (0.02, -0.5, 0.035), (0.24, -0.4, 0.04), (-0.08, -0.62, 0.03), (0.15, -0.6, 0.03)):
+        sphere("flake", r, M("4e4a52"), (x, -0.2, z), outline=False, seg=8)
+    sphere("ember", 0.035, M("ff7a3a", glow=1.6), (-0.1, -0.25, -0.44), outline=False, seg=8)
+
+
+def icon_desal():
+    wall, band = M("5f7a86"), M("66ffe8", glow=1.4)
+    for x, r, h in ((-0.32, 0.27, 0.62), (0.04, 0.2, 0.46)):
+        cylinder("tank", r, h, wall, (x, 0.08, -0.6 + h / 2))
+        cylinder("dome", r, 0.1, wall, (x, 0.08, -0.6 + h + 0.05), r2=r * 0.45)
+        cylinder("band", r + 0.012, 0.04, band, (x, 0.08, -0.6 + h * 0.55), outline=False)
+    box("tower", 0.3, -0.6, 0.44, 0.42, -0.07, 0.07, M("4a5a64"))
+    box("tower_head", 0.22, 0.4, 0.52, 0.54, -0.1, 0.1, wall)
+    sphere("light", 0.05, M("b0ffff", glow=2.0), (0.37, 0, 0.6), outline=False)
+    cylinder("pipe", 0.045, 0.6, M("8aa4ae"), (-0.05, -0.2, -0.48), rot=(0, math.pi / 2, 0))
+    teardrop("drop", 0.12, M("4fb4ff", light=1.3), (-0.5, -0.3, 0.35))
+
+
+def icon_mirror():
+    cylinder("shaft", 0.09, 0.98, M("4a5a64"), (0, 0.15, -0.13), r2=0.06)
+    cylinder("receiver", 0.15, 0.22, M("fff0b0", glow=2.0), (0, 0.15, 0.45))
+    cylinder("cap", 0.11, 0.06, M("4a5a64"), (0, 0.15, 0.59))
+    for k in range(8):
+        a = k * math.pi / 4
+        cylinder("ray", 0.025, 0.12, M("ffd870", glow=1.3), (math.cos(a) * 0.27, 0.15, 0.45 + math.sin(a) * 0.27), rot=(0, math.pi / 2 - a, 0), outline=False, r2=0.0)
+
+    def heliostat():
+        box("frame", -0.2, -0.12, 0.2, 0.12, -0.02, 0.02, M("6a8a96"))
+        box("face", -0.17, -0.09, 0.17, 0.09, -0.04, -0.02, M("c4ecff", light=1.3), outline=False)
+
+    for s in (-1, 1):
+        box("post", s * 0.42 - 0.025, -0.62, s * 0.42 + 0.025, -0.38, -0.1, -0.05, M("3a4a52"))
+        pivoted((s * 0.42, -0.1, -0.33), (-0.6, s * 0.45, 0), heliostat)
+
+
+def icon_archive():
+    lump("rock", 0.6, M("6a5a52"), (0, 0.2, -0.6), (1.05, 0.7, 1.75), seed=3)
+    box("portal", -0.32, -0.62, 0.32, 0.08, -0.45, -0.25, M("8a9296"), bevel=0.03)
+    torus("rim", 0.22, 0.04, M("c9a560"), (0, -0.46, -0.27), rot=(math.pi / 2, 0, 0), outline=True)
+    cylinder("open", 0.2, 0.02, M("6aff9a", glow=1.4), (0, -0.46, -0.27), rot=(math.pi / 2, 0, 0), outline=False)
+    box("sign", -0.14, -0.02, 0.14, 0.05, -0.47, -0.45, M("2a3a30", ao=0.0), outline=False)
+    for x in (-0.38, 0.36):
+        sphere("bush", 0.09, M("5cbf5a"), (x, -0.5, -0.58), scale=(1.3, 1, 1))
+
+
+def icon_haven():
+    lump("hill", 0.62, M("6a9a3c"), (0, 0.2, -0.62), (1.15, 0.7, 0.75), seed=5, sub=2)
+    box("walls", -0.32, -0.3, 0.06, 0.02, -0.15, 0.1, M("c9a07a"))
+    prism("roof", [(-0.4, 0.0), (0.14, 0.0), (-0.13, 0.24)], -0.18, 0.13, M("a0402a"))
+    box("window", -0.12, -0.2, -0.02, -0.1, -0.16, -0.15, M("ffd890", glow=1.0), outline=False)
+    box("door", -0.26, -0.3, -0.17, -0.12, -0.16, -0.15, M("5a3a24"), outline=False)
+    cylinder("mast", 0.035, 0.9, M("d8dcd6"), (0.36, 0.1, -0.03), r2=0.022)
+    for k in range(3):
+        a = math.radians(80 + k * 120)
+        pts = [(0, -0.03), (0.3, -0.01), (0.3, 0.01), (0.06, 0.045)]
+        pts = [(0.36 + x * math.cos(a) - z * math.sin(a), 0.42 + x * math.sin(a) + z * math.cos(a)) for x, z in pts]
+        prism("blade", pts, 0.03, 0.05, M("eef0ec"))
+    sphere("hub", 0.04, M("6a8a96"), (0.36, 0.02, 0.42), outline=False)
+    sphere("tree", 0.15, M("5e8a3a"), (-0.5, 0.05, -0.12), scale=(1, 1, 0.9))
+    cylinder("trunk", 0.03, 0.2, M("4a3424"), (-0.5, 0.06, -0.3))
+
+
+def icon_trophy():
+    gold = M("f0b84a", light=1.3)
+    cylinder("cup", 0.2, 0.46, gold, (0, 0, 0.2), r2=0.38, seg=32)
+    torus("rim", 0.38, 0.04, M("ffd27a"), (0, 0, 0.43), outline=True)
+    for s in (-1, 1):
+        torus("handle", 0.13, 0.04, gold, (s * 0.36, 0, 0.22), rot=(math.pi / 2, 0, 0), outline=True)
+    cylinder("stem", 0.06, 0.22, gold, (0, 0, -0.12))
+    sphere("knob", 0.09, gold, (0, 0, -0.06), scale=(1, 1, 0.8))
+    cylinder("foot", 0.2, 0.06, gold, (0, 0, -0.25))
+    box("base", -0.3, -0.6, 0.3, -0.28, -0.22, 0.22, M("6a4630"), bevel=0.03)
+    box("plate", -0.16, -0.5, 0.16, -0.38, -0.23, -0.22, M("f0b84a", ao=0.0), outline=False)
+    pts = [(math.cos(math.pi / 2 + i * math.pi / 5) * (0.11 if i % 2 == 0 else 0.045), 0.2 + math.sin(math.pi / 2 + i * math.pi / 5) * (0.11 if i % 2 == 0 else 0.045)) for i in range(10)]
+    prism("star", pts, -0.36, -0.33, M("fff2b0", glow=1.1), outline=False)
+
+
+ICONS = {"arrow": icon_arrow, "bulb": icon_bulb,
     "scrap": icon_scrap, "parts": icon_parts, "food": icon_food, "water": icon_water, "crew": icon_crew,
     "home": icon_home, "cooling": icon_cooling, "drone": icon_drone, "train": icon_train, "tower": icon_tower,
     "wrench": icon_wrench, "hammer": icon_hammer, "bed": icon_bed, "shield": icon_shield, "sun": icon_sun,
     "temp": icon_temp, "map": icon_map, "star": icon_star, "warning": icon_warning,
+    "data": icon_data, "flask": icon_flask, "medkit": icon_medkit, "crate": icon_crate, "raider": icon_raider,
+    "trade": icon_trade, "rail": icon_rail, "ash": icon_ash, "desal": icon_desal, "mirror": icon_mirror,
+    "archive": icon_archive, "haven": icon_haven, "trophy": icon_trophy,
 }
 
 if __name__ == "__main__":
