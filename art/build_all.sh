@@ -11,5 +11,6 @@ python3 art/build_sprites.py "$TMP/crew" assets/sprites/crew
 run carriages.py train && mkdir -p assets/sprites/train && cp "$TMP"/train/*.png assets/sprites/train/
 run scenery.py scenery && mkdir -p assets/sprites/scenery && cp "$TMP"/scenery/*.png assets/sprites/scenery/
 run icons.py icons && mkdir -p assets/sprites/icons && cp "$TMP"/icons/*.png assets/sprites/icons/
+run puzzle.py puzzle && mkdir -p assets/sprites/puzzle && cp "$TMP"/puzzle/*.png assets/sprites/puzzle/
 rm -rf "$TMP"
 echo "art rebuilt"

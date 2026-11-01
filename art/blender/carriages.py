@@ -36,7 +36,7 @@ HULL2 = "4e5864"   # level 6+: brushed steel
 TEAL = "33c2b0"    # level 6+: trim stripe
 GOLD = "e8c060"    # level 9+: trim
 WALLS = {"quarters": "35514f", "greenhouse": "245a48", "recycler": "1f4c64", "workshop": "2f5452", "cooling": "1d5260", "dronebay": "235254",
-         "cargo": "3c4a40", "medbay": "3f6a72", "lab": "263f58"}
+         "cargo": "3c4a40", "medbay": "3f6a72", "lab": "263f58", "condenser": "1b4766"}
 
 
 def M(hexstr, **kw):
@@ -162,6 +162,7 @@ GEAR = {
     "cargo": [(7, "antenna", 106, {}), (7, "ac", 212, {}), (8, "solar", 32, {}), (9, "solar", 190, {"w": 24}), (10, "dish", 122, {})],
     "medbay": [(7, "antenna", 18, {}), (7, "ac", 210, {}), (8, "solar", 77, {"w": 34}), (9, "solar", 160, {}), (10, "dish", 190, {})],
     "lab": [(7, "ac", 30, {}), (7, "antenna", 197, {}), (8, "solar", 94, {"w": 34}), (9, "solar", 130, {"w": 34}), (10, "dish", 213, {})],
+    "condenser": [(7, "antenna", 16, {}), (7, "ac", 214, {}), (8, "tank", 102, {}), (9, "antenna", 182, {}), (10, "dish", 195, {})],
 }
 
 
@@ -934,6 +935,149 @@ def lab(level):
             sphere("graph_pt", 0.6, M("ffb347", glow=1.5), (x, BACK - 2.3, z), outline=False, seg=8)
 
 
+WATER = "3a9cf0"
+COLD = "7fd8ff"
+
+
+def intake_fan(cx, cz, r, level):
+    """Wall intake fan: housing ring, dark throat, swept blades and a hub."""
+    torus("fan_ring", r, 1.6, M("2d4656"), (cx, BACK - 5, cz), rot=(math.pi / 2, 0, 0), outline=True)
+    ycyl("fan_throat", r - 0.6, 2, M("0c1a22", ao=0.0), cx, cz, BACK - 2.5, outline=False, seg=32)
+    for k in range(5):
+        a = k * 2 * math.pi / 5 + 0.3
+        pts = [(cx, cz), (cx + math.cos(a) * (r - 1.5), cz + math.sin(a) * (r - 1.5)), (cx + math.cos(a + 0.75) * (r - 2.5), cz + math.sin(a + 0.75) * (r - 2.5))]
+        prism("fan_blade", pts, BACK - 4.6, BACK - 3.8, M("6f97aa", light=1.25), outline=False)
+    ycyl("fan_hub", r * 0.22, 1.4, M("9ab4c0"), cx, cz, BACK - 5.4)
+    for k in range(3):  # inflow streaks: the cool air being pulled in
+        box("airflow", cx - r - 9 + k * 2, cz - 5 + k * 5, cx - r - 3 + k * 2, cz - 4.4 + k * 5, BACK - 6, BACK - 5.6, M(COLD, glow=0.6), outline=False)
+
+
+def dew_panel(x0, x1, z0, z1, level):
+    """Mesh net the night air condenses on, with beads of dew and a gutter underneath."""
+    frame = M("3a4a56")
+    for a, b, c, d in ((x0, z0, x1, z0 + 2), (x0, z1 - 2, x1, z1), (x0, z0, x0 + 2, z1), (x1 - 2, z0, x1, z1)):
+        box("net_frame", a, b, c, d, BACK - 4, BACK - 1, frame)
+    box("net_back", x0 + 2, z0 + 2, x1 - 2, z1 - 2, BACK - 1.2, BACK - 1, M("15364a", ao=0.0), outline=False)
+    mesh = M("7fb6cc", ao=0.0)
+    step = 5.0
+    n = int((x1 - x0 - 4 + (z1 - z0)) / step)
+    for k in range(1, n):  # diagonal mesh both ways, clipped to the frame
+        for sgn in (1, -1):
+            d0 = x0 + 2 + k * step - (z1 - z0 - 4)
+            ax, az = max(x0 + 2, d0), z0 + 2 + max(0.0, x0 + 2 - d0)
+            bx, bz = min(x1 - 2, d0 + (z1 - z0 - 4)), z0 + 2 + min(z1 - z0 - 4, x1 - 2 - d0)
+            if bx - ax < 0.8:
+                continue
+            if sgn < 0:
+                az, bz = z0 + z1 - az, z0 + z1 - bz
+            length = math.dist((ax, az), (bx, bz))
+            ang = math.atan2(bx - ax, bz - az)
+            cylinder("mesh", 0.22, length, mesh, ((ax + bx) / 2, BACK - 2.6, (az + bz) / 2), rot=(0, ang, 0), outline=False, seg=6)
+    for k in range(int((x1 - x0) / 5) + level // 2):
+        dx = x0 + 4 + (k * 7.3) % (x1 - x0 - 8)
+        dz = z0 + 5 + (k * 11.7) % (z1 - z0 - 10)
+        sphere("dew", 0.75, M("d8f6ff", glow=1.2), (dx, BACK - 3, dz), outline=False, seg=8)
+    xcyl("gutter", 1.8, x0 - 1, x1 + 1, z0 - 1.5, BACK - 4, M("5a7684"))
+    box("gutter_water", x0, z0 - 1.2, x1, z0 - 0.2, BACK - 5.9, BACK - 5.7, M(WATER, glow=0.9), outline=False)
+
+
+def water_tank(cx, level, h=40.0):
+    r = 7.5
+    zcyl("wt_base", r + 1.2, FLOOR, FLOOR + 4, cx, 20, M("4a5a66"), seg=28)
+    box("wt_back", cx - r, FLOOR + 4, cx + r, FLOOR + 4 + h, 26, 27, M("a8dcf0", ao=0.0), outline=False)
+    lvl = h * (0.55 + 0.04 * min(level, 10))
+    box("wt_water", cx - r, FLOOR + 4, cx + r, FLOOR + 4 + lvl, 25.6, 26, M(WATER if level < 9 else "4ab4ff", light=1.2, ao=0.0), outline=False)
+    box("wt_surface", cx - r, FLOOR + 3.4 + lvl, cx + r, FLOOR + 4.2 + lvl, 25.4, 25.6, M("a8e4ff", ao=0.0), outline=False)
+    for x in (cx - r, cx + r - 1.0):
+        box("wt_edge", x, FLOOR + 4, x + 1.0, FLOOR + 4 + h, 25.2, 25.6, M("6fa8c0", ao=0.0), outline=False)
+    box("wt_glint", cx - r + 1.6, FLOOR + 7, cx - r + 2.8, FLOOR + h, 11.6, 12, M("ffffff", glow=0.5), outline=False)
+    zcyl("wt_cap", r + 1.2, FLOOR + 4 + h, FLOOR + 8 + h, cx, 20, M("4a5a66"), seg=28)
+    for k in range(2):
+        sphere("wt_bubble", 0.6, M("dff6ff", glow=1.0), (cx + 2 - k * 3, 13, FLOOR + 9 + k * 7), outline=False, seg=8)
+
+
+def condenser(level):
+    """Night-air water harvester: intake fans pull air over a frosty fin tower and dew nets;
+    the condensate drains into a row of glass tanks. The floor in front stays clear for crew."""
+    cold = M(COLD, glow=1.1)
+    # Fin tower with a glowing cold core (grows with level), copper-to-frost coil from level 4.
+    top = 76.0 + min(level, 5) * 4.0
+    box("tower_base", 12, FLOOR, 54, FLOOR + 7, 12, 28, M("2a3640"))
+    box("tower_core", 27, FLOOR + 7, 39, top, 16, 26, M("1a3a4c"))
+    box("tower_glow", 29.5, FLOOR + 9, 36.5, top - 2, 15.6, 16, cold, outline=False)
+    fins = int((top - FLOOR - 12) / 4.5)
+    for k in range(fins):
+        z = FLOOR + 11 + k * 4.5
+        box("fin", 14, z, 52, z + 1.5, 14, 26, M("8fb8c8", light=1.25))
+    box("tower_cap", 12, top, 54, top + 4, 12, 28, M("3a4a56"))
+    zcyl("tower_pipe", 1.4, top + 4, TOP - 9, 33, 20, M("5a7684"))
+    if level >= 4:
+        coil = M("c98a4a" if level < 7 else "bfe6f2", light=1.25)
+        n = 7
+        for k in range(n):
+            za, zb = FLOOR + 14 + k * (top - FLOOR - 22) / n, FLOOR + 14 + (k + 1) * (top - FLOOR - 22) / n
+            xa, xb = (17, 49) if k % 2 == 0 else (49, 17)
+            length = math.dist((xa, za), (xb, zb))
+            cylinder("coil", 1.1, length, coil, ((xa + xb) / 2, 12.5, (za + zb) / 2), rot=(0, math.atan2(xb - xa, zb - za), 0), seg=10)
+    # Dew nets on the back wall, draining into a gutter.
+    dew_panel(60, 96, 60, 100, level)
+    if level >= 2:
+        dew_panel(144, 166, 62, 100, level)
+    # Intake fans pulling the night air in.
+    intake_fan(122, 86, 13, level)
+    if level >= 5:
+        intake_fan(122, 59, 9, level)
+    # Collection line from the gutters to the tanks, with a pressure gauge.
+    pipe = M("5a7684")
+    tanks = 1 if level < 3 else (2 if level < 5 else 3)
+    x_end = 211.0 - (tanks - 1) * 17.5 - 7.0  # the line runs into the first tank
+    xcyl("collect", 1.6, 60, x_end, 46, BACK - 5, pipe)
+    box("collect_glow", 64, 45.4, x_end - 2, 46.6, BACK - 6.7, BACK - 6.5, M(WATER, glow=0.8), outline=False)
+    for x in (80.0, 158.0)[:1 if level < 2 else 2]:
+        zcyl("drain", 1.2, 46, 58, x, BACK - 4, pipe, outline=False)
+    gx, gz = 102.0, 46.0  # pressure gauge inline on the collection pipe
+    ycyl("gauge", 4.6, 1.4, M("e8eef0"), gx, gz, BACK - 7.5)
+    torus("gauge_rim", 4.6, 0.7, M("8a9aa6"), (gx, BACK - 8.3, gz), rot=(math.pi / 2, 0, 0))
+    box("needle", gx - 0.4, gz, gx + 0.4, gz + 3.6, BACK - 8.6, BACK - 8.4, M("c83a2a", ao=0.0), outline=False).rotation_euler = (0, -0.6, 0)
+    for k in range(5):
+        a = math.radians(210 - k * 60)
+        box("gauge_tick", gx + math.cos(a) * 3.4 - 0.3, gz + math.sin(a) * 3.4 - 0.3, gx + math.cos(a) * 3.4 + 0.3, gz + math.sin(a) * 3.4 + 0.3, BACK - 8.6, BACK - 8.4, M("2a2e34", ao=0.0), outline=False)
+    if level >= 4:  # second gauge on the tower base
+        ycyl("gauge2", 3.0, 1.2, M("e8eef0"), 46, FLOOR + 3.6, 11.2)
+        torus("gauge2_rim", 3.0, 0.5, M("8a9aa6"), (46, 10.5, FLOOR + 3.6), rot=(math.pi / 2, 0, 0))
+        box("needle2", 45.6, FLOOR + 3.6, 46.4, FLOOR + 6, 10.2, 10.4, M("c83a2a", ao=0.0), outline=False)
+    # Glass tanks of collected water (more with level).
+    for k in range(tanks):
+        water_tank(211.0 - k * 17.5, level, h=40.0 + (k % 2) * 6)
+    # Tier 2: glowing floor line (6+), frost on fins and fan (7+), sight glass (8+), humidity display (9+), cryo dome (10).
+    if level >= 6:
+        xcyl("floor_line", 1.3, 12, W - 12, FLOOR + 2.2, 27, M("2d5a70"))
+        xcyl("floor_line_glow", 0.5, 14, W - 14, FLOOR + 2.2, 25.6, M(COLD, glow=1.0), outline=False)
+    if level >= 7:
+        frost = M("e4f8ff", ao=0.0)
+        for k in range(0, fins, 2):
+            z = FLOOR + 12.5 + k * 4.5
+            sphere("rime", 1.2, frost, (16 + (k * 7) % 30, 13.6, z), scale=(2.4, 0.8, 0.7), outline=False, seg=8)
+        for a in (2.0, 2.5, 0.7):
+            sphere("fan_rime", 1.3, frost, (122 + math.cos(a) * 13, BACK - 7, 86 + math.sin(a) * 13), scale=(1.5, 0.8, 0.8), outline=False, seg=8)
+    if level >= 8:  # glowing level lights on each tank base
+        for k in range(tanks):
+            cx = 211.0 - k * 17.5
+            box("tank_led", cx - 4, FLOOR + 1.2, cx + 4, FLOOR + 2.6, 11.0, 11.4, M("5fe8f0", glow=1.5), outline=False)
+    if level >= 9:  # console with a humidity read-out under the second dew net
+        box("console", 141, FLOOR, 165, FLOOR + 11, 16, 28, M("23303a"))
+        box("hum_screen", 143, FLOOR + 3, 163, FLOOR + 9.5, 15.6, 16, M("0c1820", ao=0.0), outline=False)
+        for k in range(5):
+            box("hum_bar", 145 + k * 3.6, FLOOR + 4.2, 147.4 + k * 3.6, FLOOR + 5.4 + k * 0.9, 15.4, 15.6, M(COLD if k < 4 else "ffb347", glow=1.3), outline=False)
+    if level >= 10:  # gold-ringed cryo collar with a window on the fin tower
+        for z in (FLOOR + 30, FLOOR + 44):
+            box("cryo_band", 24, z, 42, z + 2.2, 10.6, 27, M(GOLD, light=1.3))
+        box("cryo_case", 25, FLOOR + 32, 41, FLOOR + 44, 11.0, 26, M("2a4a5c"))
+        box("cryo_window", 27.5, FLOOR + 34, 38.5, FLOOR + 42, 10.6, 11.0, M("c8fbff", glow=1.6), outline=False)
+        for x in (18, 30, 44):
+            cylinder("icicle", 1.0, 4.5, M("e4f8ff", ao=0.0), (x, 12.4, top - 2.2), rot=(math.pi, 0, 0), r2=0.1, seg=8)
+
+
 def roof_extra(kind):
     if kind == "greenhouse":
         for i in range(3):
@@ -957,6 +1101,21 @@ def roof_extra(kind):
         box("vent_box", 30, TOP + 19, 56, TOP + 26, 4, 24, M("30343b"))
         box("cross_sign", 98, TOP + 19, 134, TOP + 35, 4, 22, M("f4f4f0"), bevel=2.0)
         red_cross(116, TOP + 27, 11, 3.9, M("e0302a", glow=0.9))
+    elif kind == "condenser":
+        # Slanted dew net catching the night air, and a roof intake hood with a fan.
+        for x in (32.0, 76.0):
+            box("net_leg", x - 1, TOP + 19, x + 1, TOP + 27, 10, 14, M("3a3f45"))
+        prism("net_frame", [(28, TOP + 25), (80, TOP + 25), (80, TOP + 36), (28, TOP + 30)], 4, 22, M("4a5a66"))
+        prism("net_face", [(30, TOP + 26.2), (78, TOP + 26.2), (78, TOP + 34.4), (30, TOP + 29.6)], 3.2, 4, M("1e4a62", ao=0.0), outline=False)
+        for k in range(1, 8):
+            x = 30 + k * 6
+            box("net_wire", x - 0.2, TOP + 26.4, x + 0.2, TOP + 29.6 + (x - 30) * 4.8 / 48, 3.0, 3.2, M("8fc8dc", ao=0.0), outline=False)
+        box("hood", 124, TOP + 19, 168, TOP + 31, 4, 24, M("30343b"), bevel=2)
+        ycyl("hood_fan", 5, 0.6, M("0c1a22", ao=0.0), 146, TOP + 25, 3.6, outline=False)
+        torus("hood_grille", 5, 0.5, M("9ab4c0"), (146, 3.3, TOP + 25), rot=(math.pi / 2, 0, 0))
+        for k in range(3):
+            box("hood_slot", 129, TOP + 21.5 + k * 2.6, 137, TOP + 22.3 + k * 2.6, 3.6, 4, M("15181c"), outline=False)
+            box("hood_slot", 155, TOP + 21.5 + k * 2.6, 163, TOP + 22.3 + k * 2.6, 3.6, 4, M("15181c"), outline=False)
     elif kind == "lab":
         sphere("sensor_dome", 13, M("aeb8c2"), (60, 15, TOP + 19), scale=(1, 0.9, 0.8), seg=28)
         box("dome_ring", 46, TOP + 18.5, 74, TOP + 21, 4, 26, M("30343b"))
@@ -967,7 +1126,7 @@ def roof_extra(kind):
 
 
 BUILDERS = {"quarters": quarters, "greenhouse": greenhouse, "recycler": recycler, "workshop": workshop, "cooling": cooling, "dronebay": dronebay,
-            "cargo": cargo, "medbay": medbay, "lab": lab}
+            "cargo": cargo, "medbay": medbay, "lab": lab, "condenser": condenser}
 
 
 # ---------------------------------------------------------------- locomotive and parts

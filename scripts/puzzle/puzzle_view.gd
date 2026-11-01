@@ -66,7 +66,7 @@ func _sync_arrays() -> void:
 
 ## Tank rects in rows (one row up to 6 tanks, otherwise two), sized to fit.
 func _layout() -> void:
-	if board == null:
+	if board == null or size.x < 100.0 or size.y < 100.0:
 		return
 	_sync_arrays()
 	var n := board.tanks.size()

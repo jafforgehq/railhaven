@@ -90,7 +90,7 @@ func _stations() -> Array:
 		"lab": return [40.0, 100.0, 162.0, 204.0, 72.0]
 		"medbay": return [34.0, 80.0, 126.0, 188.0]
 		"cargo": return [46.0, 104.0, 132.0, 190.0]
-		"condenser": return [60.0, 150.0]
+		"condenser": return [80.0, 130.0, 186.0]
 		"quarters": return [60.0, 120.0, 150.0, 190.0]
 		"locomotive": return [150.0]
 	return [100.0]

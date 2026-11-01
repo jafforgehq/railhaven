@@ -195,6 +195,131 @@ def prism(name, pts, y0, y1, mat, outline=True):
     return finish(name, bm, mat, outline=outline, smooth=False)
 
 
+def lathe(name, prof, mat, loc=(0, 0, 0), rot=(0, 0, 0), outline=True, seg=64, smooth=True):
+    """Spin a (radius, z) profile around the local Z axis: domed caps, rings, bottles."""
+    bm = bmesh.new()
+    vs = [bm.verts.new((r, 0.0, z)) for r, z in prof]
+    es = [bm.edges.new((vs[i], vs[i + 1])) for i in range(len(vs) - 1)]
+    bmesh.ops.spin(bm, geom=vs + es, cent=(0, 0, 0), axis=(0, 0, 1), angle=2 * math.pi, steps=seg, use_merge=True)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return finish(name, bm, mat, loc, rot, (1, 1, 1), outline, smooth=smooth)
+
+
+# ---------------------------------------------------------------- flat 2D shapes (emblems, glyphs)
+
+def ccw(pts):
+    a = sum(x0 * z1 - x1 * z0 for (x0, z0), (x1, z1) in zip(pts, pts[1:] + pts[:1]))
+    return list(pts) if a > 0 else list(reversed(pts))
+
+
+def offset_poly(pts, d, limit=2.2):
+    """Grow a simple (x, z) polygon outward by d. Convex corners are mitred, or bevelled
+    where the miter would spike past limit * d."""
+    P = [Vector(p) for p in ccw(pts)]
+    n = len(P)
+    out = []
+    for i in range(n):
+        a, p, b = P[i - 1], P[i], P[(i + 1) % n]
+        e1, e2 = (p - a).normalized(), (b - p).normalized()
+        n1, n2 = Vector((e1.y, -e1.x)), Vector((e2.y, -e2.x))
+        m = n1 + n2
+        convex = e1.x * e2.y - e1.y * e2.x > 0
+        if m.length < 1e-6:
+            out.append(tuple(p + n1 * d))
+            continue
+        m.normalize()
+        k = 1.0 / max(1e-3, m.dot(n1))
+        if convex and k > limit:
+            out += [tuple(p + n1 * d), tuple(p + n2 * d)]
+        else:
+            out.append(tuple(p + m * d * min(k, 6.0)))
+    return out
+
+
+def stroke_poly(path, w, seg=8):
+    """Outline polygon of a round-capped polyline of width w."""
+    P = [Vector(p) for p in path]
+    h, n = w / 2.0, len(P)
+
+    def normal(i):
+        d1 = (P[max(i, 1)] - P[max(i, 1) - 1]).normalized()
+        d2 = (P[min(i + 1, n - 1)] - P[min(i + 1, n - 1) - 1]).normalized()
+        n1, n2 = Vector((-d1.y, d1.x)), Vector((-d2.y, d2.x))
+        m = (n1 + n2).normalized()
+        return m / max(0.35, m.dot(n1))
+
+    def cap(p, nv):
+        a0 = math.atan2(nv.y, nv.x)
+        return [tuple(p + Vector((math.cos(a0 - math.pi * k / seg), math.sin(a0 - math.pi * k / seg))) * h) for k in range(1, seg)]
+
+    left = [tuple(P[i] + normal(i) * h) for i in range(n)]
+    right = [tuple(P[i] - normal(i) * h) for i in range(n)]
+    return left + cap(P[-1], normal(n - 1)) + right[::-1] + cap(P[0], -normal(0))
+
+
+def fillet(pts, r, k=5):
+    """Round every corner of a polygon with radius r."""
+    P = [Vector(p) for p in pts]
+    out = []
+    for i in range(len(P)):
+        a, p, b = P[i - 1], P[i], P[(i + 1) % len(P)]
+        u, v = (a - p).normalized(), (b - p).normalized()
+        half = math.acos(max(-1.0, min(1.0, u.dot(v)))) / 2
+        t = min(r / math.tan(half), (a - p).length * 0.45, (b - p).length * 0.45)
+        rr = t * math.tan(half)
+        c = p + (u + v).normalized() * (rr / math.sin(half))
+        s, e = p + u * t, p + v * t
+        a0, a1 = math.atan2(s.y - c.y, s.x - c.x), math.atan2(e.y - c.y, e.x - c.x)
+        da = (a1 - a0 + math.pi) % (2 * math.pi) - math.pi
+        out += [(c.x + rr * math.cos(a0 + da * j / k), c.y + rr * math.sin(a0 + da * j / k)) for j in range(k + 1)]
+    return out
+
+
+def spline(pts, n=6, sharp=()):
+    """Closed Catmull-Rom curve through pts; indices in sharp stay pointed corners."""
+    P = [Vector(p) for p in pts]
+    L = len(P)
+    T = [Vector((0, 0)) if i in sharp else (P[(i + 1) % L] - P[i - 1]) * 0.5 for i in range(L)]
+    out = []
+    for i in range(L):
+        p0, p1, m0, m1 = P[i], P[(i + 1) % L], T[i], T[(i + 1) % L]
+        for j in range(n):
+            t = j / n
+            h00, h10, h01, h11 = 2 * t ** 3 - 3 * t ** 2 + 1, t ** 3 - 2 * t ** 2 + t, -2 * t ** 3 + 3 * t ** 2, t ** 3 - t ** 2
+            q = p0 * h00 + m0 * h10 + p1 * h01 + m1 * h11
+            out.append((q.x, q.y))
+    return out
+
+
+def slab(name, pts, y0, y1, mat, chamfer=0.0, outline=False):
+    """Prism of an (x, z) outline from y0 (camera side) back to y1. chamfer > 0 raises a
+    bevelled front face so the 3-band toon light picks out its edges (an embossed look)."""
+    bm = bmesh.new()
+    pts = ccw(pts)
+    front = [bm.verts.new((x, y0, z)) for x, z in pts]
+    back = [bm.verts.new((x, y1, z)) for x, z in pts]
+    f = bm.faces.new(front)
+    bm.faces.new(list(reversed(back)))
+    for i in range(len(pts)):
+        j = (i + 1) % len(pts)
+        bm.faces.new((front[j], front[i], back[i], back[j]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    if chamfer > 0:
+        bmesh.ops.inset_region(bm, faces=[f], thickness=chamfer, depth=chamfer, use_even_offset=True)
+    return finish(name, bm, mat, outline=outline, smooth=False)
+
+
+def ring_slab(name, cx, cz, r0, r1, y0, y1, mat, chamfer=0.0, outline=False, seg=48):
+    """Flat washer facing the camera (annulus r0..r1), optionally with chamfered front edges."""
+    c = min(chamfer, (r1 - r0) * 0.3)
+    if c > 0:
+        prof = [(r0, -y1), (r0, -y0 - c), (r0 + c, -y0), (r1 - c, -y0), (r1, -y0 - c), (r1, -y1), (r0, -y1)]
+    else:
+        prof = [(r0, -y1), (r0, -y0), (r1, -y0), (r1, -y1), (r0, -y1)]
+    return lathe(name, prof, mat, (cx, 0, cz), (math.pi / 2, 0, 0), outline, seg, smooth=False)
+
+
 def text(name, body, size, mat, loc, rot=(math.pi / 2, 0, 0)):
     cu = bpy.data.curves.new(name, "FONT")
     cu.body = body

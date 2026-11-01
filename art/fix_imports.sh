@@ -10,7 +10,7 @@ changed=0
 for f in assets/sprites/*/*.png.import; do
 	# Icons and portraits stay lossless (UI art); world sprites use VRAM compression.
 	case "$f" in
-		assets/sprites/icons/*|*_portrait.png.import) mode=0; hq=false ;;
+		assets/sprites/icons/*|assets/sprites/puzzle/*|*_portrait.png.import) mode=0; hq=false ;;
 		*) mode=2; hq=true ;;
 	esac
 	if ! grep -q "^compress/mode=$mode" "$f" || ! grep -q "^compress/high_quality=$hq" "$f" || ! grep -q "^mipmaps/generate=true" "$f"; then

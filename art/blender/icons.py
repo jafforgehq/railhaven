@@ -406,6 +406,106 @@ def icon_trophy():
     prism("star", pts, -0.36, -0.33, M("fff2b0", glow=1.1), outline=False)
 
 
+def icon_heart():
+    # Two lobes and a soft point, as one outline (round lobes keep the chamfer clean).
+    pts = []
+    for i in range(25):
+        a = math.radians(-38 + 218 * i / 24)
+        pts.append((0.26 + 0.29 * math.cos(a), 0.16 + 0.29 * math.sin(a)))
+    for i in range(25):
+        a = math.radians(0 + 218 * i / 24)
+        pts.append((-0.26 + 0.29 * math.cos(a), 0.16 + 0.29 * math.sin(a)))
+    pts = pts[:25] + pts[25:]
+    pts += [(-0.06, -0.47), (0.0, -0.53), (0.06, -0.47)]
+    C.slab("heart", pts, -0.13, 0.13, M("e0402a", light=1.25), chamfer=0.05, outline=True)
+    teardrop("drop", 0.085, M("8fe6ff", light=1.25, ao=0.0), (-0.27, -0.2, 0.2), point=1.8)
+    sphere("shine", 0.05, M("ffffff", glow=1.0), (-0.15, -0.21, 0.33), outline=False, seg=10)
+
+
+def icon_snowflake():
+    ice = M("a8e6ff", light=1.3)
+    for k in range(3):
+        a = math.pi / 2 + k * math.pi / 3
+        C.slab("arm", C.stroke_poly([(-math.cos(a) * 0.56, -math.sin(a) * 0.56), (math.cos(a) * 0.56, math.sin(a) * 0.56)], 0.13), -0.07, 0.07, ice, chamfer=0.025, outline=True)
+    for k in range(6):
+        a = math.pi / 2 + k * math.pi / 3
+        tip = (math.cos(a) * 0.32, math.sin(a) * 0.32)
+        for sgn in (-1, 1):
+            b = a + sgn * 0.8
+            C.slab("branch", C.stroke_poly([tip, (tip[0] + math.cos(b) * 0.21, tip[1] + math.sin(b) * 0.21)], 0.1), -0.07, 0.07, ice, chamfer=0.02, outline=True)
+    C.slab("hub", [(math.cos(math.pi / 6 + k * math.pi / 3) * 0.13, math.sin(math.pi / 6 + k * math.pi / 3) * 0.13) for k in range(6)], -0.1, 0.06,
+           M("e8f8ff", light=1.2), chamfer=0.02, outline=True)
+
+
+def icon_undo():
+    arc_arrow("undo", 0.36, 0.095, math.radians(-50), math.radians(195), M("f0b84a", light=1.3))
+    for o in bpy.data.objects:
+        if o.type == "MESH":
+            o.location.z -= 0.04
+
+
+def icon_tank():
+    glass, steel = M("d4ecf4", light=1.2), M("6a7a88", light=1.3)
+    cylinder("base", 0.36, 0.14, M("3a414b", light=1.25), (-0.06, 0, -0.55))
+    cylinder("coolant", 0.3, 0.5, M("3fd8c2", light=1.3), (-0.06, 0.0, -0.23))
+    cylinder("surface", 0.3, 0.03, M("8ff4e4", ao=0.0), (-0.06, 0.0, 0.03), outline=False)
+    cylinder("glass", 0.3, 0.36, glass, (-0.06, 0.0, 0.2))
+    cylinder("collar", 0.33, 0.1, steel, (-0.06, 0, 0.42))
+    cylinder("collar_b", 0.33, 0.08, steel, (-0.06, 0, -0.46))
+    box("shine", -0.27, -0.38, -0.22, 0.32, -0.31, -0.29, M("ffffff", glow=1.0), outline=False)
+    for z in (-0.25, 0.0, 0.2):
+        box("tick", 0.1, z, 0.18, z + 0.025, -0.31, -0.29, M("2a5a64", ao=0.0), outline=False)
+    for x, z, r in ((-0.1, -0.36, 0.04), (0.04, -0.2, 0.03), (-0.04, -0.06, 0.025)):
+        sphere("bubble", r, M("e8fff8", glow=1.1), (x, -0.3, z), outline=False, seg=8)
+    cylinder("badge", 0.17, 0.06, M("f0b84a", light=1.3), (0.34, -0.3, 0.36), rot=(math.pi / 2, 0, 0), seg=24)
+    plus = M("ffffff", ao=0.0)
+    box("plus_v", 0.32, 0.27, 0.36, 0.45, -0.35, -0.33, plus, outline=False)
+    box("plus_h", 0.25, 0.34, 0.43, 0.38, -0.35, -0.33, plus, outline=False)
+
+
+def icon_condenser():
+    body, fin, cold = M("5f7a86", light=1.3), M("a8d8e8", light=1.25), M("8fe6ff", glow=1.3)
+    cx = -0.14
+    cylinder("body", 0.19, 0.86, body, (cx, 0.05, 0.0))
+    for k in range(6):
+        cylinder("fin", 0.38, 0.045, fin, (cx, 0.05, -0.32 + k * 0.12), seg=28)
+    cylinder("cap", 0.24, 0.12, body, (cx, 0.05, 0.42), r2=0.13)
+    sphere("cap_light", 0.05, cold, (cx, 0.05, 0.5), outline=False, seg=10)
+    cylinder("foot", 0.28, 0.1, M("3a414b", light=1.25), (cx, 0.05, -0.46))
+    cylinder("spout", 0.05, 0.42, M("8aa4ae", light=1.3), (0.2, -0.05, -0.4), rot=(0, math.pi / 2, 0))
+    cylinder("nozzle", 0.06, 0.1, M("8aa4ae", light=1.3), (0.38, -0.05, -0.45))
+    teardrop("drop", 0.13, M("4fb4ff", light=1.3), (0.4, -0.12, -0.62), point=1.9)
+    for x, z in ((-0.5, 0.15), (-0.5, -0.09), (-0.45, -0.25), (0.2, 0.2)):  # dew beading on the fins
+        sphere("dew", 0.035, M("e8fbff", glow=1.2), (x, -0.32, z), outline=False, seg=8)
+    for o in bpy.data.objects:
+        if o.type == "MESH":
+            o.location.z += 0.08
+
+
+def icon_play():
+    tri = C.fillet([(-0.36, 0.5), (-0.36, -0.5), (0.5, 0.0)], 0.1)
+    C.slab("play", [(x + 0.04, z) for x, z in tri], -0.12, 0.12, M("62c95a", light=1.25), chamfer=0.06, outline=True)
+    sphere("shine", 0.045, M("ffffff", glow=1.0), (-0.22, -0.2, 0.3), outline=False, seg=10)
+
+
+def icon_gift():
+    wood, board, ribbon = M("b07a44"), M("c8905a", light=1.2), M("e0402a", light=1.25)
+    box("crate", -0.44, -0.58, 0.44, 0.16, -0.3, 0.3, wood, bevel=0.03)
+    box("lid", -0.5, 0.12, 0.5, 0.3, -0.34, 0.34, board, bevel=0.03)
+    for x0, x1 in ((-0.44, -0.34), (0.34, 0.44)):
+        box("post", x0, -0.58, x1, 0.12, -0.33, -0.3, board)
+    box("gap", -0.34, -0.22, 0.34, -0.2, -0.31, -0.3, M("6a4424", ao=0.0), outline=False)
+    box("ribbon_v", -0.08, -0.58, 0.08, 0.31, -0.36, 0.36, ribbon)
+    box("ribbon_h", -0.51, 0.15, 0.51, 0.27, -0.36, 0.36, ribbon, outline=False)
+    for s_ in (-1, 1):
+        sphere("bow", 0.15, ribbon, (s_ * 0.15, -0.05, 0.42), scale=(1.4, 0.6, 0.85), rot=(0, s_ * 0.5, 0))
+        prism("tail", [(s_ * 0.02, 0.33), (s_ * 0.16, 0.33), (s_ * 0.26, 0.13), (s_ * 0.16, 0.17)], -0.1, 0.0, ribbon)
+    sphere("knot", 0.08, M("ff6a4a", light=1.2), (0, -0.12, 0.37))
+    for x, z in ((-0.39, -0.52), (0.39, -0.52), (-0.39, 0.05), (0.39, 0.05)):
+        sphere("stud", 0.03, M("f0b84a", ao=0.0), (x, -0.34, z), outline=False, seg=8)
+    sphere("sparkle", 0.05, M("fff2b0", glow=1.6), (0.36, -0.4, 0.55), outline=False, seg=8)
+
+
 ICONS = {"arrow": icon_arrow, "bulb": icon_bulb,
     "scrap": icon_scrap, "parts": icon_parts, "food": icon_food, "water": icon_water, "crew": icon_crew,
     "home": icon_home, "cooling": icon_cooling, "drone": icon_drone, "train": icon_train, "tower": icon_tower,
@@ -414,6 +514,8 @@ ICONS = {"arrow": icon_arrow, "bulb": icon_bulb,
     "data": icon_data, "flask": icon_flask, "medkit": icon_medkit, "crate": icon_crate, "raider": icon_raider,
     "trade": icon_trade, "rail": icon_rail, "ash": icon_ash, "desal": icon_desal, "mirror": icon_mirror,
     "archive": icon_archive, "haven": icon_haven, "trophy": icon_trophy,
+    "heart": icon_heart, "snowflake": icon_snowflake, "undo": icon_undo, "tank": icon_tank,
+    "condenser": icon_condenser, "play": icon_play, "gift": icon_gift,
 }
 
 if __name__ == "__main__":

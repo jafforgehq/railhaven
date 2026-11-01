@@ -11,6 +11,7 @@ var _task_icon: Icon
 var _task_text: Label
 var _task_cost: Label
 var _task_hint: Label
+var _cost_icon: Icon
 var _restore: Button
 var _cond: Button
 var _shop: Button
@@ -36,7 +37,8 @@ func _ready() -> void:
 	_task_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_task_cost = UIKit.label("", "Value")
 	_task_hint = UIKit.label("", "Small")
-	var col := UIKit.vbox(0, [_task_text, UIKit.hbox(6, [Icon.make("parts", 24), _task_cost, _task_hint])])
+	_cost_icon = Icon.make("parts", 24)
+	var col := UIKit.vbox(0, [_task_text, UIKit.hbox(6, [_cost_icon, _task_cost, _task_hint])])
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_restore = UIKit.button("RESTORE", "GoldButton", "hammer", 62)
 	_restore.custom_minimum_size.x = 190
@@ -82,10 +84,12 @@ func refresh() -> void:
 			_restore.get_meta("label").text = "DEPART"
 		_task_cost.text = ""
 		_task_hint.text = ""
+		_cost_icon.visible = false
 	else:
 		var t := Game.current_task()
 		_task_icon.kind = r["landmark"] if t.get("landmark", false) else Data.CARRIAGES[t["type"]]["icon"]
 		_task_text.text = t["text"]
+		_cost_icon.visible = true
 		_task_cost.text = "%d / %d" % [mini(Game.parts, int(t["cost"])), int(t["cost"])]
 		var why := Game.task_block_reason()
 		_task_hint.text = "  win levels to earn parts" if why != "" else "  ready!"
